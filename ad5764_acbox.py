@@ -16,9 +16,9 @@
 """
 ### BEGIN NODE INFO
 [info]
-name = DCBOX Arduino
+name = ACBOX Arduino
 version = 1.0
-description = DCBOX control
+description = ACBOX control
 
 [startup]
 cmdline = %PYTHON% %FILE%
@@ -39,8 +39,7 @@ from labrad.types import Value
 TIMEOUT = Value(5,'s')
 BAUD    = 115200
 
-class AD5764DcboxWrapper(DeviceWrapper):
-    channels = [0,1,2,3,4,5,6,7]
+class AD5764AcboxWrapper(DeviceWrapper):
 
     @inlineCallbacks
     def connect(self, server, port):
@@ -86,29 +85,11 @@ class AD5764DcboxWrapper(DeviceWrapper):
         ans = yield p.send()
         returnValue(ans.read_line)
 
-    @inlineCallbacks
-    def set_voltage(self,channel,voltage):
-        if channel not in self.channels:
-            print("ERROR: invalid channel")
-            raise
-        if abs(voltage)>10.0:
-            print("ERROR: invalid voltage. Must be between -10.0 and 10.0")
-            raise
-        yield self.packet().write("SET,%i,%f\r"%(channel,voltage)).send()
-        p=self.packet()
-        p.read_line()
-        ans = yield p.send()
-        returnValue(ans.read_line)
-        
 
-
-class AD5764DcboxServer(DeviceServer):
-    name = 'ad5764_dcbox'
-    deviceName = 'Arduino Dcbox'
-    deviceWrapper = AD5764DcboxWrapper
-
-    channels = [0,1,2,3,4,5,6,7]
-
+class AD5764AcboxServer(DeviceServer):
+    name          = 'ad5764_acbox'
+    deviceName    = 'Arduino Acbox'
+    deviceWrapper = AD5764AcboxWrapper
 
     @inlineCallbacks
     def initServer(self):
@@ -134,38 +115,7 @@ class AD5764DcboxServer(DeviceServer):
     def findDevices(self):
         server = self.client['majorana_serial_server']
         ports = yield server.list_serial_ports()
-
-
-##        print('\n'*4)
-##        print(server)
-##        print(ports)
-##
-##        dc_ports = []
-##        yield server.close()
-##        yield server.open('COM4')
-##        yield server.baudrate(BAUD)
-##        yield server.timeout(TIMEOUT)
-##        yield server.write("*IDN?\r")
-##        print(server.read())
-##
-####        dc_ports = []
-####        server.close()
-####        for port in ports:
-######            try:
-####            #server.close()
-####            server.open(port)
-####            server.write("*IDN?\r")
-####            ans = yield server.read()
-####            server.close()
-####            #if ans.startswith("DCBOX_DUAL_AD5764"):
-####            #    dc_ports.append(port)
-####            print(ans)
-######            except:
-######                print("ans")
-##
-##        print(dc_ports)
-##        print('\n'*4)
-        
+        #print(ports)
         devs = [('dcbox (port %s)'%port,(server,port)) for port in ports]
         returnValue(devs)
 
@@ -175,47 +125,19 @@ class AD5764DcboxServer(DeviceServer):
         dev=self.selectedDevice(c)
         yield dev.connect(server,port)
 
-    @setting(200,port='i',voltage='v',returns='s')
-    def set_voltage(self,c,port,voltage):
-        dev=self.selectedDevice(c)
-        ans=yield dev.set_voltage(port,voltage)
-        returnValue(ans)
-        
-    @setting(9001,v='v')
-    def do_nothing(self,c,v):
-        pass
-    @setting(9002)
-    def read(self,c):
-        dev=self.selectedDevice(c)
-        ret=yield dev.read()
-        returnValue(ret)
-    @setting(9003)
-    def write(self,c,phrase):
-        dev=self.selectedDevice(c)
-        yield dev.write(phrase)
-    @setting(9004)
-    def query(self,c,phrase):
-        dev=self.selectedDevice(c)
-        yield dev.write(phrase)
-        ret = yield dev.read()
-        returnValue(ret)
 
-    
-__server__ = AD5764DcboxServer()
 
+
+
+
+
+
+
+
+
+
+
+__server__ = AD5764AcboxServer()
 if __name__ == '__main__':
     from labrad import util
     util.runServer(__server__)
-
-
-
-
-
-
-
-
-
-
-
-
-
