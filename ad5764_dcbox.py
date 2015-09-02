@@ -30,6 +30,9 @@ timeout = 20
 ### END NODE INFO
 """
 
+global blacklisted_ports
+blacklisted_ports = ['COM1','COM8']
+
 from labrad.server import setting
 from labrad.devices import DeviceServer,DeviceWrapper
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -135,38 +138,13 @@ class AD5764DcboxServer(DeviceServer):
         server = self.client['majorana_serial_server']
         ports = yield server.list_serial_ports()
 
-
-##        print('\n'*4)
-##        print(server)
-##        print(ports)
-##
-##        dc_ports = []
-##        yield server.close()
-##        yield server.open('COM4')
-##        yield server.baudrate(BAUD)
-##        yield server.timeout(TIMEOUT)
-##        yield server.write("*IDN?\r")
-##        print(server.read())
-##
-####        dc_ports = []
-####        server.close()
-####        for port in ports:
-######            try:
-####            #server.close()
-####            server.open(port)
-####            server.write("*IDN?\r")
-####            ans = yield server.read()
-####            server.close()
-####            #if ans.startswith("DCBOX_DUAL_AD5764"):
-####            #    dc_ports.append(port)
-####            print(ans)
-######            except:
-######                print("ans")
-##
-##        print(dc_ports)
-##        print('\n'*4)
-        
-        devs = [('dcbox (port %s)'%port,(server,port)) for port in ports]
+        devs = []
+        self.voltages = []
+        global blacklisted_ports
+        for port in ports:
+            if not (port in blacklisted_ports):
+                devs.append(('dcbox (%s)'%port,(server,port)))
+                self.voltages.append([port]+['unknown' for pos in range(8)])
         returnValue(devs)
 
     
@@ -177,9 +155,25 @@ class AD5764DcboxServer(DeviceServer):
 
     @setting(200,port='i',voltage='v',returns='s')
     def set_voltage(self,c,port,voltage):
+        #print(dir(c))
+        if not (port in range(8)):
+            returnValue("Error: invalid port number.")
+            return
+        if (voltage > 10) or (voltage < -10):
+            returnValue("Error: invalid voltage. It must be between -10 and 10.")
+            return
         dev=self.selectedDevice(c)
         ans=yield dev.set_voltage(port,voltage)
+
+        # port+1 since the first entry is the COM number
+        self.voltages[c['device']][port+1] = str(voltage)
+        
         returnValue(ans)
+
+    @setting(8999)
+    def get_voltages(self,c):
+        ret = yield self.voltages
+        returnValue(ret)
         
     @setting(9001,v='v')
     def do_nothing(self,c,v):
