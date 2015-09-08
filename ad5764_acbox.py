@@ -30,14 +30,18 @@ timeout = 20
 ### END NODE INFO
 """
 
+global blacklisted_ports
+blacklisted_ports = ['COM1','COM4']
+
 from labrad.server import setting
 from labrad.devices import DeviceServer,DeviceWrapper
 from twisted.internet.defer import inlineCallbacks, returnValue
 import labrad.units as units
 from labrad.types import Value
+import time
 
 TIMEOUT = Value(5,'s')
-BAUD    = 115200
+BAUD    = 19200
 
 class AD5764AcboxWrapper(DeviceWrapper):
 
@@ -106,29 +110,124 @@ class AD5764AcboxServer(DeviceServer):
         cxn=yield connectAsync()
         reg=cxn.registry
         context = yield cxn.context()
-        #yield reg.cd(['','Servers','DACBOX','COM'],True)
-        #self.port = yield reg.get('port') # Port# for DCBOX
-        self.serialLinks = {} # {'dcbox':['majorana_serial_server',self.port]}
+        self.serialLinks = {}
         print('SERVERS:',self.client.servers.keys())
     
     @inlineCallbacks
     def findDevices(self):
         server = self.client['majorana_serial_server']
         ports = yield server.list_serial_ports()
-        #print(ports)
-        devs = [('dcbox (port %s)'%port,(server,port)) for port in ports]
+
+        devs = []
+        self.voltages = []
+        global blacklisted_ports
+        for port in ports:
+            if not (port in blacklisted_ports):
+                devs.append(('acbox (%s)'%port,(server,port)))
+                self.voltages.append([port]+['unknown' for pos in range(8)])
         returnValue(devs)
 
-    
     @setting(100)
     def connect(self,c,server,port):
         dev=self.selectedDevice(c)
         yield dev.connect(server,port)
 
+    @setting(201,clock_multiplier='i',returns='s' )
+    def initialize(self,c,clock_multiplier=4):
+        dev=self.selectedDevice(c)
+        yield dev.write("NOP\r") # clear input buffer
+        yield dev.read()         # clear output buffer
+        yield dev.write("INIT,%i\r"%clock_multiplier);
+        ans = yield dev.read()
+        returnValue(ans)
 
+    @setting(202,channel='s',value='v',returns='s')
+    def set_channel_voltage(self,c,channel,value):
+        dev=self.selectedDevice(c)
+        yield dev.write("SET,%s,%f\r"%(channel,value))
+        ans = yield dev.read()
+        
+        yield dev.write("UPD\r") # updates boards automatically
+        upd = yield dev.read()   # on changing any relevant setting
+        
+        returnValue(ans)
 
+    @setting(203,offset='v',returns='s')
+    def set_phase(self,c,offset):
+        dev=self.selectedDevice(c)
+        yield dev.write("PHS,1,%f\r"%offset)
+        yield dev.write("PHS,2,0\r")
+        ans1=yield dev.read()
+        ans2=yield dev.read()
+        
+        yield dev.write("UPD\r") # updates boards automatically
+        upd = yield dev.read()   # on changing any relevant setting
+        
+        returnValue(ans1)
 
+    @setting(204,frequency='i',returns='s')
+    def set_frequency(self,c,frequency):
+        dev=self.selectedDevice(c)
+        yield dev.write("FRQ,%i\r"%frequency)
+        ans = yield dev.read()
+        
+        yield dev.write("UPD\r") # updates boards automatically
+        upd = yield dev.read()   # on changing any relevant setting
+        
+        returnValue(ans)
 
+    @setting(205,returns='s')
+    def identify(self,c):
+        dev=self.selectedDevice(c)
+        yield dev.write("*IDN?\r")
+        ans = yield dev.read()
+        returnValue(ans)
+
+    @setting(206,returns='s')
+    def get_is_ready(self,c):
+        dev=self.selectedDevice(c)
+        yield dev.write("*RDY?\r")
+        ans = yield dev.read()
+        returnValue(ans)
+
+    @setting(207,returns='s')
+    def reset(self,c):
+        dev=self.selectedDevice(c)
+        yield dev.write("MR\r")
+        ans = yield dev.read()
+        returnValue(ans)
+
+    @setting(208,returns='s')
+    def update_boards(self,c):
+        dev=self.selectedDevice(c)
+        yield dev.write("UPD\r")
+        ans = yield dev.read()
+        returnValue(ans)
+
+    @setting(209,channel='s',returns=['v','s'])
+    def get_channel_voltage(self,c,channel):
+        dev=self.selectedDevice(c)
+        yield dev.write("GET,%s\r"%channel)
+        ans = yield dev.read()
+        if ans.startswith("ER"):
+            returnValue(ans)
+        else:
+            ret = yield float(ans)
+            returnValue(ret)
+
+    @setting(210,returns='v')
+    def get_phase(self,c):
+        dev=self.selectedDevice(c)
+        yield dev.write("PHS?\r")
+        ans=yield dev.read()
+        returnValue(float(ans))
+
+    @setting(211,returns='v')
+    def get_frequency(self,c):
+        dev=self.selectedDevice(c)
+        yield dev.write("FRQ?\r")
+        ans = yield dev.read()
+        returnValue(float(ans))
 
 
 
