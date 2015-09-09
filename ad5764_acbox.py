@@ -133,7 +133,7 @@ class AD5764AcboxServer(DeviceServer):
         yield dev.connect(server,port)
 
     @setting(201,clock_multiplier='i',returns='s' )
-    def initialize(self,c,clock_multiplier=4):
+    def initialize(self,c,clock_multiplier=5):
         dev=self.selectedDevice(c)
         yield dev.write("NOP\r") # clear input buffer
         yield dev.read()         # clear output buffer

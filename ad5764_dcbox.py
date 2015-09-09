@@ -166,9 +166,17 @@ class AD5764DcboxServer(DeviceServer):
         ans=yield dev.set_voltage(port,voltage)
 
         # port+1 since the first entry is the COM number
-        self.voltages[c['device']][port+1] = str(voltage)
-        
+        self.voltages[c['device']][port+1] = ans.partition(' TO ')[2][:-1]
         returnValue(ans)
+
+    @setting(8998)
+    def read_voltages(self,c):
+        dev=self.selectedDevice(c)
+        for port in range(8):
+            yield dev.write("GET_DAC,%i\r"%port)
+            ans = yield dev.read()
+            self.voltages[c['device']][port+1] = ans
+        returnValue("DONE")
 
     @setting(8999)
     def get_voltages(self,c):
