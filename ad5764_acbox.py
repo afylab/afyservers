@@ -30,6 +30,10 @@ timeout = 20
 ### END NODE INFO
 """
 
+global port_to_int,int_to_port
+port_to_int = {'X1':0,'Y1':1,'X2':2,'Y2':3}
+int_to_port = ['X1','Y1','X2','Y2']
+
 global blacklisted_ports
 blacklisted_ports = ['COM1','COM4']
 
@@ -124,7 +128,8 @@ class AD5764AcboxServer(DeviceServer):
         for port in ports:
             if not (port in blacklisted_ports):
                 devs.append(('acbox (%s)'%port,(server,port)))
-                self.voltages.append([port]+['unknown' for pos in range(8)])
+                self.voltages.append([port]+['unknown' for pos in range(6)])
+                # entries of voltages[i] are [port, x1, y1, x2, y2, frequency, phase]
         returnValue(devs)
 
     @setting(100)
@@ -150,6 +155,8 @@ class AD5764AcboxServer(DeviceServer):
         yield dev.write("UPD\r") # updates boards automatically
         upd = yield dev.read()   # on changing any relevant setting
         
+        self.voltages[c['device']][port_to_int[channel] + 1] = ans.partition(' to ')[2]
+        
         returnValue(ans)
 
     @setting(203,offset='v',returns='s')
@@ -162,7 +169,9 @@ class AD5764AcboxServer(DeviceServer):
         
         yield dev.write("UPD\r") # updates boards automatically
         upd = yield dev.read()   # on changing any relevant setting
-        
+
+        self.voltages[c['device']][6] = ans1.partition(' to ')[2]+' degrees'
+
         returnValue(ans1)
 
     @setting(204,frequency='i',returns='s')
@@ -173,7 +182,9 @@ class AD5764AcboxServer(DeviceServer):
         
         yield dev.write("UPD\r") # updates boards automatically
         upd = yield dev.read()   # on changing any relevant setting
-        
+
+        self.voltages[c['device']][5] = ans.partition(' to ')[2]
+
         returnValue(ans)
 
     @setting(205,returns='s')
@@ -229,7 +240,28 @@ class AD5764AcboxServer(DeviceServer):
         ans = yield dev.read()
         returnValue(float(ans))
 
+    @setting(8998)
+    def read_voltages(self,c):
+        dev=self.selectedDevice(c)
+        for n in range(4):
+            yield dev.write("GET,%s\r"%int_to_port[n])
+            ans = yield dev.read()
+            self.voltages[c['device']][n+1] = str(ans)
+        yield dev.write("FRQ?\r")
+        frq = yield dev.read()
+        self.voltages[c['device']][5]=str(frq)
+        
+        yield dev.write("PHS?\r")
+        phs = yield dev.read()
+        self.voltages[c['device']][6]=str(phs)
 
+    @setting(8999)
+    def get_voltages(self,c):
+        ret = yield self.voltages
+        returnValue(ret)
+        
+        
+        
 
 
 
