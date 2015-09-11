@@ -30,6 +30,10 @@ timeout = 20
 ### END NODE INFO
 """
 
+import platform
+global serial_server_name
+serial_server_name = platform.node() + '_serial_server'
+
 global port_to_int,int_to_port
 port_to_int = {'X1':0,'Y1':1,'X2':2,'Y2':3}
 int_to_port = ['X1','Y1','X2','Y2']
@@ -119,7 +123,7 @@ class AD5764AcboxServer(DeviceServer):
     
     @inlineCallbacks
     def findDevices(self):
-        server = self.client['majorana_serial_server']
+        server = self.client[serial_server_name]
         ports = yield server.list_serial_ports()
 
         devs = []

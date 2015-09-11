@@ -30,6 +30,10 @@ timeout = 20
 ### END NODE INFO
 """
 
+import platform
+global serial_server_name
+serial_server_name = platform.node() + '_serial_server'
+
 global blacklisted_ports
 blacklisted_ports = ['COM1','COM8']
 
@@ -128,14 +132,12 @@ class AD5764DcboxServer(DeviceServer):
         cxn=yield connectAsync()
         reg=cxn.registry
         context = yield cxn.context()
-        #yield reg.cd(['','Servers','DACBOX','COM'],True)
-        #self.port = yield reg.get('port') # Port# for DCBOX
-        self.serialLinks = {} # {'dcbox':['majorana_serial_server',self.port]}
+        self.serialLinks = {}
         print('SERVERS:',self.client.servers.keys())
     
     @inlineCallbacks
     def findDevices(self):
-        server = self.client['majorana_serial_server']
+        server = self.client[serial_server_name]
         ports = yield server.list_serial_ports()
 
         devs = []
