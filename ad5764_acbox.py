@@ -170,14 +170,19 @@ class AD5764AcboxServer(DeviceServer):
         yield dev.write("UPD\r") # updates boards automatically
         upd = yield dev.read()   # on changing any relevant setting
 
-        self.voltages[c['device']][6] = ans1.partition(' to ')[2]+' degrees'
+        self.voltages[c['device']][6] = ans1.partition(' to ')[2]
 
         returnValue(ans1)
 
-    @setting(204,frequency='i',returns='s')
+    @setting(204,frequency='v',returns='s')
     def set_frequency(self,c,frequency):
         dev=self.selectedDevice(c)
-        yield dev.write("FRQ,%i\r"%frequency)
+        
+        if frequency <= 0:
+            yield None
+            returnValue("Error: frequency cannot be zero (or less.)")
+            
+        yield dev.write("FRQ,%f\r"%frequency)
         ans = yield dev.read()
         
         yield dev.write("UPD\r") # updates boards automatically
@@ -247,9 +252,10 @@ class AD5764AcboxServer(DeviceServer):
             yield dev.write("GET,%s\r"%int_to_port[n])
             ans = yield dev.read()
             self.voltages[c['device']][n+1] = str(ans)
+            
         yield dev.write("FRQ?\r")
         frq = yield dev.read()
-        self.voltages[c['device']][5]=str(frq)
+        self.voltages[c['device']][5]=str(frq)+' HZ'
         
         yield dev.write("PHS?\r")
         phs = yield dev.read()
