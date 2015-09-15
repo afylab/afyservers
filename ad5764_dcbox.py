@@ -34,9 +34,6 @@ import platform
 global serial_server_name
 serial_server_name = platform.node() + '_serial_server'
 
-global blacklisted_ports
-blacklisted_ports = ['COM1','COM8']
-
 from labrad.server import setting
 from labrad.devices import DeviceServer,DeviceWrapper
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -137,16 +134,15 @@ class AD5764DcboxServer(DeviceServer):
     
     @inlineCallbacks
     def findDevices(self):
-        server = self.client[serial_server_name]
-        ports = yield server.list_serial_ports()
+        server  = self.client[serial_server_name]
+        manager = self.client.serial_device_manager
+        ports = yield manager.list_ad5764_dcbox_devices()
 
         devs = []
         self.voltages = []
-        global blacklisted_ports
         for port in ports:
-            if not (port in blacklisted_ports):
-                devs.append(('dcbox (%s)'%port,(server,port)))
-                self.voltages.append([port]+['unknown' for pos in range(8)])
+            devs.append(('dcbox (%s)'%port[0],(server,port[0])))
+            self.voltages.append([port[0]]+['unknown' for pos in range(8)])
         returnValue(devs)
 
     

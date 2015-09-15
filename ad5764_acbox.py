@@ -38,9 +38,6 @@ global port_to_int,int_to_port
 port_to_int = {'X1':0,'Y1':1,'X2':2,'Y2':3}
 int_to_port = ['X1','Y1','X2','Y2']
 
-global blacklisted_ports
-blacklisted_ports = ['COM1','COM4']
-
 from labrad.server import setting
 from labrad.devices import DeviceServer,DeviceWrapper
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -123,17 +120,16 @@ class AD5764AcboxServer(DeviceServer):
     
     @inlineCallbacks
     def findDevices(self):
-        server = self.client[serial_server_name]
-        ports = yield server.list_serial_ports()
+        server  = self.client.servers[serial_server_name]
+        manager = self.client.serial_device_manager
+        ports = yield manager.list_ad5764_acbox_devices()
 
         devs = []
         self.voltages = []
-        global blacklisted_ports
         for port in ports:
-            if not (port in blacklisted_ports):
-                devs.append(('acbox (%s)'%port,(server,port)))
-                self.voltages.append([port]+['unknown' for pos in range(6)])
-                # entries of voltages[i] are [port, x1, y1, x2, y2, frequency, phase]
+            devs.append(('acbox (%s)'%port[0],(server,port[0])))
+            self.voltages.append([port[0]]+['unknown' for pos in range(6)])
+            # entries of voltages[i] are [port, x1, y1, x2, y2, frequency, phase]
         returnValue(devs)
 
     @setting(100)
