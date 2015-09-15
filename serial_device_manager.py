@@ -63,8 +63,9 @@ class SerialDeviceManager(LabradServer):
                     print("Found active port: COM%i"%port)
                 except:
                     pass
-        #if len(self.serialPorts):
-        #    print(self.serialPorts)
+        if len(self.serialPorts):
+            print("Found serial ports: ")
+            print(self.serialPorts)
         else:print("No serial ports found.")
 
     def identifyPorts(self):
@@ -75,6 +76,7 @@ class SerialDeviceManager(LabradServer):
             ser = Serial('\\\\.\\%s'%port)
             ser.setTimeout(1)
 
+            success=False
             for rate in baudrates:
                 ser.setBaudrate(rate)
                 ser.write('NOP\r');ser.readline() # clear buffer
@@ -82,8 +84,9 @@ class SerialDeviceManager(LabradServer):
                 if not(idn == ''):
                     print("Port %s responded to *IDN? command with string %s and baudrate %i"%(port,idn,rate))
                     self.portTypes.append([port,idn,str(rate)])
+                    success=True
                     break
-                print("Port %s did not respond to any known identification commands.")
+            if not success:print("Port %s did not respond to any known identification commands."%port)
                 
         print(self.portTypes)
             
