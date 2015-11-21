@@ -30,13 +30,9 @@ timeout = 20
 ### END NODE INFO
 """
 
-def labrad_format(string):
-	"""Converts to all lower case, and converts '-' to '_'"""
-	return (string.lower()).replace('-','_')
-
 import platform
 global serial_server_name
-serial_server_name = labrad_format(platform.node()) + '_serial_server'
+serial_server_name = (platform.node() + "_serial_server").replace("-","_").lower()
 
 from labrad.server import setting
 from labrad.devices import DeviceServer,DeviceWrapper
