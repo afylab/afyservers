@@ -113,25 +113,56 @@ class AD5764AcboxServer(DeviceServer):
 
     @inlineCallbacks
     def loadConfigInfo(self):
-        from labrad.wrappers import connectAsync
-        cxn=yield connectAsync()
-        reg=cxn.registry
-        context = yield cxn.context()
-        self.serialLinks = {}
-        print('SERVERS:',self.client.servers.keys())
-    
+        """Load configuration information from the registry."""
+        # reg = self.client.registry
+        # p = reg.packet()
+        # p.cd(['', 'Servers', 'Heat Switch'], True)
+        # p.get('Serial Links', '*(ss)', key='links')
+        # ans = yield p.send()
+        # self.serialLinks = ans['links']
+        reg = self.reg
+        yield reg.cd(['', 'Servers', 'Dual_AD9854', 'Links'], True)
+        dirs, keys = yield reg.dir()
+        p = reg.packet()
+        print " created packet"
+        print "printing all the keys",keys
+        for k in keys:
+            print "k=",k
+            p.get(k, key=k)
+            
+        ans = yield p.send()
+        print "ans=",ans
+        self.serialLinks = dict((k, ans[k]) for k in keys)
+
+
     @inlineCallbacks
     def findDevices(self):
-        server  = self.client.servers[serial_server_name]
-        manager = self.client.serial_device_manager
-        ports = yield manager.list_ad5764_acbox_devices()
-
+        """Find available devices from list stored in the registry."""
         devs = []
-        self.voltages = []
-        for port in ports:
-            devs.append(('acbox (%s)'%port[0],(server,port[0])))
-            self.voltages.append([port[0]]+['unknown' for pos in range(6)])
-            # entries of voltages[i] are [port, x1, y1, x2, y2, frequency, phase]
+        # for name, port in self.serialLinks:
+        # if name not in self.client.servers:
+        # continue
+        # server = self.client[name]
+        # ports = yield server.list_serial_ports()
+        # if port not in ports:
+        # continue
+        # devName = '%s - %s' % (name, port)
+        # devs += [(devName, (server, port))]
+        # returnValue(devs)
+        for name, (serServer, port) in self.serialLinks.items():
+            if serServer not in self.client.servers:
+                continue
+            server = self.client[serServer]
+            print server
+            print port
+            ports = yield server.list_serial_ports()
+            print ports
+            if port not in ports:
+                continue
+            devName = '%s - %s' % (serServer, port)
+            devs += [(devName, (server, port))]
+
+       # devs += [(0,(3,4))]
         returnValue(devs)
 
     @setting(100)
