@@ -183,7 +183,7 @@ class QuadAD5764DcboxServer(DeviceServer):
         dev=self.selectedDevice(c)
         yield dev.connect(server,port)
 
-    @setting(102,)
+    @setting(102)
     def initialize(self,c):
         dev=self.selectedDevice(c)
         yield dev.write("INITIALIZE\r")

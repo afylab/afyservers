@@ -183,6 +183,11 @@ class AD5764DcboxServer(DeviceServer):
         dev=self.selectedDevice(c)
         yield dev.connect(server,port)
 
+    @setting(102)
+    def initialize(self,c):
+        dev=self.selectedDevice(c)
+        yield dev.write("INITIALIZE\r")
+
     @setting(200,port='i',voltage='v',returns='s')
     def set_voltage(self,c,port,voltage):
         #print(dir(c))
