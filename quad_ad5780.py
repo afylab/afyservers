@@ -16,7 +16,7 @@
 """
 ### BEGIN NODE INFO
 [info]
-name = DCBOX Arduino
+name = Quad_AD5780
 version = 1.0
 description = DCBOX control
 
@@ -43,8 +43,8 @@ from labrad.types import Value
 TIMEOUT = Value(5,'s')
 BAUD    = 115200
 
-class AD5764DcboxWrapper(DeviceWrapper):
-    channels = [0,1,2,3,4,5,6,7]
+class QuadAD5780DcboxWrapper(DeviceWrapper):
+    channels = [0,1,2,3]
 
     @inlineCallbacks
     def connect(self, server, port):
@@ -106,12 +106,12 @@ class AD5764DcboxWrapper(DeviceWrapper):
         
 
 
-class AD5764DcboxServer(DeviceServer):
-    name = 'ad5764_dcbox'
+class QuadAD5764DcboxServer(DeviceServer):
+    name = 'Quad_AD5780'
     deviceName = 'Arduino Dcbox'
-    deviceWrapper = AD5764DcboxWrapper
+    deviceWrapper = QuadAD5780DcboxWrapper
 
-    channels = [0,1,2,3,4,5,6,7]
+    channels = [0,1,2,3]
 
 
     @inlineCallbacks
@@ -133,7 +133,7 @@ class AD5764DcboxServer(DeviceServer):
         # ans = yield p.send()
         # self.serialLinks = ans['links']
         reg = self.reg
-        yield reg.cd(['', 'Servers', 'Dual AD5764', 'Links'], True)
+        yield reg.cd(['', 'Servers', 'Quad_AD5780', 'Links'], True)
         dirs, keys = yield reg.dir()
         p = reg.packet()
         print " created packet"
@@ -191,7 +191,7 @@ class AD5764DcboxServer(DeviceServer):
     @setting(200,port='i',voltage='v',returns='s')
     def set_voltage(self,c,port,voltage):
         #print(dir(c))
-        if not (port in range(8)):
+        if not (port in range(4)):
             returnValue("Error: invalid port number.")
             return
         if (voltage > 10) or (voltage < -10):
@@ -238,7 +238,7 @@ class AD5764DcboxServer(DeviceServer):
         returnValue(ret)
 
     
-__server__ = AD5764DcboxServer()
+__server__ = QuadAD5764DcboxServer()
 
 if __name__ == '__main__':
     from labrad import util
