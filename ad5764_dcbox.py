@@ -133,7 +133,7 @@ class AD5764DcboxServer(DeviceServer):
         # ans = yield p.send()
         # self.serialLinks = ans['links']
         reg = self.reg
-        yield reg.cd(['', 'Servers', 'Dual_AD5764', 'Links'], True)
+        yield reg.cd(['', 'Servers', 'Dual AD5764', 'Links'], True)
         dirs, keys = yield reg.dir()
         p = reg.packet()
         print " created packet"
