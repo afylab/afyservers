@@ -204,6 +204,33 @@ class GPIBBusServer(LabradServer):
         """ manually refresh devices """
         self.refreshDevices()
 
+    @setting(101, 'Read Termination', termchars='s', returns='')
+    def read_termination(self, c, termchars=''):
+        """Set the end characters for the read operation."""
+        instr = self.getDevice(c)
+        instr.read_termination = termchars
+
+    @setting(102, 'Write Termination', termchars='s', returns='')
+    def  write_termination(self, c, termchars=''):
+        """Set the end characters for the write operation."""
+        instr = self.getDevice(c)
+        instr.write_termination = termchars
+
+    @setting(103, 'Add GPIB Device', address='s', write_term='s', read_term='s', returns='')
+    def add_gpib_device(self, c, address=None, write_term='', read_term=''):
+        """Add a GPIB device with a given address, read and write terminations."""
+        try:
+            self.rm = visa.ResourceManager()
+            try:
+                instr = self.rm.open_resource(address, read_termination=read_term,
+                        write_termination=write_term, open_timeout=10.0)
+                instr.clear()
+                self.mydevices[address] = instr
+                self.sendDeviceMessage('GPIB Device Connect', address)
+            except Exception, e:
+                print('Failed to add %s: %s' %(address, str(e)))
+        except Exception, e:
+            print('Problem while adding device %s: %s' %(address, str(e)))
 
 __server__ = GPIBBusServer()
 
