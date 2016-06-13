@@ -35,11 +35,35 @@ serial_server_name = platform.node() + '_serial_server'
 from labrad.server import setting
 from labrad.devices import DeviceServer,DeviceWrapper
 from twisted.internet.defer import inlineCallbacks, returnValue
-import labrad.units as units
+from labrad.units import Value, Unit
 from labrad.types import Value
+
+from struct import unpack
+import numpy as np
+import time
 
 TIMEOUT = Value(5,'s')
 BAUD    = 9600
+
+Hz,MHz,V,nV = [Unit(s) for s in ['Hz', 'MHz', 'V', 'nV']]
+
+SPANS = {     0.03:0,
+              0.1:1,
+              0.3:2,
+              1.0:3,
+              3.0:4,
+              10.:5,
+              30.0:6,
+              100.0:7,
+              300.0:8,
+              1000.0:9,
+              3000.0:10,
+              10000.0:11,
+              30000.0:12,
+              100000.0:13,
+              300000.0:14,
+              100000.0:15}
+
 
 class SR560Wrapper(DeviceWrapper):
 
@@ -90,7 +114,7 @@ class SR560Wrapper(DeviceWrapper):
         
 
 class SR560Server(DeviceServer):
-    name = 'sr560_preamp'
+    name = 'SR560 Low-Noise Preamplifier'
     deviceName = 'SR560 Preamplifier'
     deviceWrapper = SR560Wrapper
 
@@ -113,7 +137,7 @@ class SR560Server(DeviceServer):
         # ans = yield p.send()
         # self.serialLinks = ans['links']
         reg = self.reg
-        yield reg.cd(['', 'Servers', 'SR560 Preamp', 'Links'], True)
+        yield reg.cd(['', 'Servers', 'sr_560', 'Links'], True)
         dirs, keys = yield reg.dir()
         p = reg.packet()
         print " created packet"
@@ -165,38 +189,97 @@ class SR560Server(DeviceServer):
     #Operates Amplifier Blanking
     @setting(201, e='i')
     def blank(self,c,e):
+        """
+        0: not blanked,
+        1: blanked,
+        """
         dev=self.selectedDevice(c)
         yield dev.write("BLINK %i\r\n"%e)
 
     @setting(202, coupling='i')
     def set_inputCoupling(self,c,coupling):
+        """
+        0: GND,
+        1: DC,
+        2: AC
+        """
         dev=self.selectedDevice(c)
         yield dev.write("CPLG%i\r\n"%coupling)
 
     @setting(203, reserve='i')
     def set_dynamicReserve(self,c,reserve):
+        """
+        0: low noise,
+        1: hogh DR,
+        2: calibration gains (defaults)
+        """
         dev=self.selectedDevice(c)
         yield dev.write("DYNR %i\r\n"%reserve)
 
     @setting(204, mode='i')
     def set_filterMode(self,c,mode):
+        """
+        0: bypass,
+        1: 6dB low pass,
+        2: 12dB low pass,
+        3: 6dB high pass,
+        4: 12dB high pass,
+        5: bandpass,
+        """
         dev=self.selectedDevice(c)
         yield dev.write("FLTM %i\r\n"%mode)
 
     @setting(205,gain='i')
     def set_gain(self,c,gain):
+        """        
+        (i,   gain)\n
+        (0,   1)
+        (1,   2)
+        (2,   5)
+        (3,   100)
+        (4,   200)
+        (5,   500)
+        (6,   1k)
+        (7,   2k)
+        (8,   5k)
+        (9,   10k)
+        (10,  20k)
+        (11,  50k)
+        """
+
         dev=self.selectedDevice(c)
         yield dev.write("GAIN %i\r\n"%gain)
 
     # highpass filter frequency
-    @setting(206, frequency='v')
-    def set_hFilterFrequency(self,c,frequency):    
+    @setting(206, sp=['i{integer span code}','v[Hz]'])
+    def set_hFilterFrequency(self, c, sp=None):  
+        """        
+        (i,   span)
+        (0,   0.03Hz)
+        (1,   0.1Hz)
+        (2,   0.3Hz)
+        (3,   1.0Hz)
+        (4,   3.0Hz)
+        (5,   10.0Hz)
+        (6,   30.0Hz)
+        (7,   100.0Hz)
+        (8,   300.0Hz)
+        (9,   1.0kHz)
+        (10,  3.0kHz)
+        (11,  10.0kHz)
+        """
+
         dev=self.selectedDevice(c)
-        yield dev.write("HFRQ%i\r\n"%frequency)
+        yield dev.write("HFRQ%i\r\n"%sp)
 
     @setting(207, sense='i')
-    def set_signalSense(self,c,sense):
+    def set_signalInvertSense(self,c,sense):
+        """ Sets the signal invert sense
+        0: non-inverted,
+        1: inverted,
+        """
         dev=self.selectedDevice(c)
+
         yield dev.write("INVT %i\r\n"%sense)
 
     @setting(208)
@@ -205,8 +288,27 @@ class SR560Server(DeviceServer):
         yield dev.write("LALL\r\n")
 
     # lowpass filter frequency
-    @setting(209, frequency='v')
+    @setting(209, frequency='i')
     def set_lFilterFrequency(self,c,frequency):
+        """        
+        (i,   span)
+        (0,   0.03Hz)
+        (1,   0.1Hz)
+        (2,   0.3Hz)
+        (3,   1.0Hz)
+        (4,   3.0Hz)
+        (5,   10.0Hz)
+        (6,   30.0Hz)
+        (7,   100.0Hz)
+        (8,   300.0Hz)
+        (9,   1.0kHz)
+        (10,  3.0kHz)
+        (11,  10.0kHz)
+        (12,  30.0kHz)
+        (13,  100.0kHz)
+        (14,  300.0kHz)
+        (15,  1.0MHz)
+        """
         dev=self.selectedDevice(c)
         yield dev.write("LFRQ %i\r\n"%frequency)
 
@@ -218,16 +320,28 @@ class SR560Server(DeviceServer):
 
     @setting(211, source='i')
     def set_inputSource(self,c,source):
+        """
+        0: A,
+        1: A-B,
+        2: B
+        """
         dev=self.selectedDevice(c)
         yield dev.write("SRCE %i\r\n"%source)
 
     @setting(212, status='i')
     def set_vernierGainStatus(self,c,status):
+        """
+        0: cal'd gain,
+        1: vernier fain
+        """
         dev=self.selectedDevice(c)
         yield dev.write("UCAL %i\r\n"%status)
 
     @setting(213, gain='i')
     def set_vernierGain(self,c,gain):
+        """ Sets the vernier gain to i%
+        i:0 to 100
+        """
         dev=self.selectedDevice(c)
         yield dev.write("UGGN %i\r\n"%gain)
 

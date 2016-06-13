@@ -16,7 +16,7 @@
 """
 ### BEGIN NODE INFO
 [info]
-name = DCBOX Arduino
+name = AD5764 DCBOX
 version = 1.0
 description = DCBOX control
 
@@ -107,7 +107,7 @@ class AD5764DcboxWrapper(DeviceWrapper):
 
 
 class AD5764DcboxServer(DeviceServer):
-    name = 'ad5764_dcbox'
+    name = 'AD5764 DCBOX'
     deviceName = 'Arduino Dcbox'
     deviceWrapper = AD5764DcboxWrapper
 

@@ -16,12 +16,14 @@
 """
 ### BEGIN NODE INFO
 [info]
-name = ILM 221
+name = DCBOX QUAD AD5780
 version = 1.0
-description =
+description = DCBOX control
+
 [startup]
 cmdline = %PYTHON% %FILE%
 timeout = 20
+
 [shutdown]
 message = 987654321
 timeout = 20
@@ -30,7 +32,7 @@ timeout = 20
 
 import platform
 global serial_server_name
-serial_server_name = platform.node() + '_serial_server'
+serial_server_name = (platform.node() + "_serial_server").replace("-","_").lower()
 
 from labrad.server import setting
 from labrad.devices import DeviceServer,DeviceWrapper
@@ -39,9 +41,10 @@ import labrad.units as units
 from labrad.types import Value
 
 TIMEOUT = Value(5,'s')
-BAUD    = 9600
+BAUD    = 115200
 
-class ILM221Wrapper(DeviceWrapper):
+class QuadAD5780DcboxWrapper(DeviceWrapper):
+    channels = [0,1,2,3]
 
     @inlineCallbacks
     def connect(self, server, port):
@@ -88,10 +91,13 @@ class ILM221Wrapper(DeviceWrapper):
         returnValue(ans.read_line)
         
 
-class ILM221Server(DeviceServer):
-    name = 'ILM 221'
-    deviceName = 'ILM221 Cryogen Level Meter'
-    deviceWrapper = ILM221Wrapper
+
+class QuadAD5764DcboxServer(DeviceServer):
+    name = 'DCBOX QUAD AD5780'
+    deviceName = 'Arduino Dcbox'
+    deviceWrapper = QuadAD5780DcboxWrapper
+
+    channels = [0,1,2,3]
 
 
     @inlineCallbacks
@@ -113,7 +119,7 @@ class ILM221Server(DeviceServer):
         # ans = yield p.send()
         # self.serialLinks = ans['links']
         reg = self.reg
-        yield reg.cd(['', 'Servers', 'ILM 221', 'Links'], True)
+        yield reg.cd(['', 'Servers', 'Quad AD5780', 'Links'], True)
         dirs, keys = yield reg.dir()
         p = reg.packet()
         print " created packet"
@@ -156,112 +162,79 @@ class ILM221Server(DeviceServer):
 
        # devs += [(0,(3,4))]
         returnValue(devs)
+
     
     @setting(100)
     def connect(self,c,server,port):
         dev=self.selectedDevice(c)
         yield dev.connect(server,port)
 
-    @setting(101, mode='i',returns='s')
-    def set_control(self,c,mode):
+    @setting(102)
+    def initialize(self,c):
         dev=self.selectedDevice(c)
-        yield dev.write("C%i\r"%mode)
+        yield dev.write("INITIALIZE\r")
+
+    @setting(103,port='i',voltage='v',returns='s')
+    def set_voltage(self,c,port,voltage):
+        #print(dir(c))
+        if not (port in range(4)):
+            returnValue("Error: invalid port number.")
+            return
+        if (voltage > 10) or (voltage < -10):
+            returnValue("Error: invalid voltage. It must be between -10 and 10.")
+            return
+        dev=self.selectedDevice(c)
+        yield dev.write("SET,%i,%f\r"%(port,voltage))
         ans = yield dev.read()
         returnValue(ans)
 
-    @setting(102, comm='i')
-    def set_comm_protocol(self,c,comm):
-        dev=self.selectedDevice(c)
-        yield dev.write("Q%i\r"%comm)
 
-    @setting(103, channel='i', returns='s')
-    def read_channel(self,c,channel):
+    @setting(104,port='i',returns='s')
+    def get_voltage(self,c,port):
         dev=self.selectedDevice(c)
-        yield dev.write("R%i\r"%channel)
+        if not (port in range(4)):
+            returnValue("Error: invalid port number.")
+            return
+        yield dev.write("GET_DAC,%i\r"%port)
         ans = yield dev.read()
         returnValue(ans)
 
-    @setting(104, key='i', returns='s')
-    def unlock(self,c,key):
+    @setting(105,port='i',ivoltage='v',fvoltage='v',steps='i',delay='i',returns='s')
+    def ramp1(self,c,port,ivoltage,fvoltage,steps,delay):
         dev=self.selectedDevice(c)
-        yield dev.write("U%i\r"%key)
+        yield dev.write("RAMP1,%i,%f,%f,%i,%i\r"%(port,ivoltage,fvoltage,steps,delay))
         ans = yield dev.read()
         returnValue(ans)
 
-    @setting(105, returns='s')
-    def version(self,c):
+    @setting(106,port1='i',port2='i',ivoltage1='v',ivoltage2='v',fvoltage1='v',fvoltage2='v',steps='i',delay='i',returns='s')
+    def ramp2(self,c,port1,port2,ivoltage1,ivoltage2,fvoltage1,fvoltage2,steps,delay):
         dev=self.selectedDevice(c)
-        yield dev.write("V\r")
+        yield dev.write("RAMP2,%i,%i,%f,%f,%f,%f,%i,%i\r"%(port1,port2,ivoltage1,ivoltage2,fvoltage1,fvoltage2,steps,delay))
         ans = yield dev.read()
         returnValue(ans)
 
-    @setting(106, time='i', returns='s')
-    def wait(self,c,time):
+    @setting(107,returns='s')
+    def id(self,c):
         dev=self.selectedDevice(c)
-        yield dev.write("W%i\r"%time)
+        yield dev.write("*IDN?\r")
         ans = yield dev.read()
         returnValue(ans)
 
-    @setting(107, returns='s')
-    def status(self,c):
+    @setting(108,returns='s')
+    def ready(self,c):
         dev=self.selectedDevice(c)
-        yield dev.write("X\r")
+        yield dev.write("*RDY?\r")
         ans = yield dev.read()
         returnValue(ans)
-
-    @setting(108, channel='i', returns='s')
-    def set_panelDisplay(self,c,channel):
-        dev=self.selectedDevice(c)
-        yield dev.write("F%i\r"%channel)
-        ans = yield dev.read()
-        returnValue(ans)
-
-    @setting(109, position='i', returns='s')
-    def set_steeperMotorPosition(self,c,position):
-        dev=self.selectedDevice(c)
-        yield dev.write("G%i\r"%position)
-        ans = yield dev.read()
-        returnValue(ans)
-
-    @setting(110, channel='i', returns='s')
-    def slow(self,c,channel):
-        dev=self.selectedDevice(c)
-        yield dev.write("S%i\r"%channel)
-        ans = yield dev.read()
-        returnValue(ans)
-
-    @setting(111, channel='i', returns='s')
-    def fast(self,c,channel):
-        dev=self.selectedDevice(c)
-        yield dev.write("T%i\r"%channel)
-        ans = yield dev.read()
-        returnValue(ans)
-
-    @setting(112, nKbytes='i', returns='s')
-    def load_ram(self,c,nKbytes):
-        dev=self.selectedDevice(c)
-        yield dev.write("Y%i\r"%nKbytes)
-        ans = yield dev.read()
-        returnValue(ans)
-
-    @setting(113, nKbytes='i', returns='s')
-    def dump_ram(self,c,nKbytes):
-        dev=self.selectedDevice(c)
-        yield dev.write("Z%i\r"%nKbytes)
-        ans = yield dev.read()
-        returnValue(ans)
-
-    
+        
     @setting(9001,v='v')
     def do_nothing(self,c,v):
         pass
-
     @setting(9002)
     def read(self,c):
         dev=self.selectedDevice(c)
         ret=yield dev.read()
         returnValue(ret)
-
     @setting(9003)
     def write(self,c,phrase):
         dev=self.selectedDevice(c)
@@ -274,8 +247,21 @@ class ILM221Server(DeviceServer):
         returnValue(ret)
 
     
-__server__ = ILM221Server()
+__server__ = QuadAD5764DcboxServer()
 
 if __name__ == '__main__':
     from labrad import util
     util.runServer(__server__)
+
+
+
+
+
+
+
+
+
+
+
+
+

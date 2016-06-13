@@ -90,7 +90,7 @@ class IPS120Wrapper(DeviceWrapper):
         
 
 class IPS120Server(DeviceServer):
-    name = 'ips120_power_supply'
+    name = 'IPS 120_10 Superconducting Magnet Power Supply'
     deviceName = 'IPS120 Power Supply'
     deviceWrapper = IPS120Wrapper
 
@@ -240,7 +240,7 @@ class IPS120Server(DeviceServer):
     @setting(112, field='v', returns='s')
     def set_targetField(self,c,field):
         dev=self.selectedDevice(c)
-        yield dev.write("J%i\r\n"%field)
+        yield dev.write("J%f\r\n"%field)
         ans = yield dev.read()
         returnValue(ans)
 
