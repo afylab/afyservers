@@ -90,7 +90,7 @@ class LambdaControllerWrapper(DeviceWrapper):
         
 
 class LambdaControllerServer(DeviceServer):
-    name = 'Lambda Controller'
+    name = 'lambda_controller'
     deviceName = 'Lambda Point Controller'
     deviceWrapper = LambdaControllerWrapper
 
@@ -165,82 +165,82 @@ class LambdaControllerServer(DeviceServer):
     @setting(101, mode='i',returns='s')
     def set_state(self,c,mode):
         dev=self.selectedDevice(c)
-        yield dev.write("C%i\r"%mode)
+        yield dev.write("C%i\r\n"%mode)
         ans = yield dev.read()
         returnValue(ans)
 
     @setting(102, comm='i')
     def set_comm_protocol(self,c,comm):
         dev=self.selectedDevice(c)
-        yield dev.write("Q%i\r"%comm)
+        yield dev.write("Q%i\r\n"%comm)
 
     @setting(103, channel='i', returns='s')
     def read_channel(self,c,channel):
         dev=self.selectedDevice(c)
-        yield dev.write("R%i\r"%channel)
+        yield dev.write("R%i\r\n"%channel)
         ans = yield dev.read()
         returnValue(ans)
 
     @setting(104, key='i', returns='s')
     def unlock(self,c,key):
         dev=self.selectedDevice(c)
-        yield dev.write("U%i\r"%key)
+        yield dev.write("U%i\r\n"%key)
         ans = yield dev.read()
         returnValue(ans)
 
     @setting(105, returns='s')
     def version(self,c):
         dev=self.selectedDevice(c)
-        yield dev.write("V\r")
+        yield dev.write("V\r\n")
         ans = yield dev.read()
         returnValue(ans)
 
     @setting(106, time='i', returns='s')
     def wait(self,c,time):
         dev=self.selectedDevice(c)
-        yield dev.write("W%i\r"%time)
+        yield dev.write("W%i\r\n"%time)
         ans = yield dev.read()
         returnValue(ans)
 
     @setting(107, returns='s')
     def status(self,c):
         dev=self.selectedDevice(c)
-        yield dev.write("X\r")
+        yield dev.write("X\r\n")
         ans = yield dev.read()
         returnValue(ans)
 
     @setting(108, channel='i', returns='s')
     def set_panelDisplay(self,c,channel):
         dev=self.selectedDevice(c)
-        yield dev.write("F%i\r"%channel)
+        yield dev.write("F%i\r\n"%channel)
         ans = yield dev.read()
         returnValue(ans)
 
     @setting(109, position='i', returns='s')
     def set_needlePosition(self,c,position):
         dev=self.selectedDevice(c)
-        yield dev.write("G%i\r"%position)
+        yield dev.write("G%i\r\n"%position)
         ans = yield dev.read()
         returnValue(ans)
 
     @setting(110, e='i', returns='s')
     def load_lineariser(self,c,e):
         dev=self.selectedDevice(c)
-        yield dev.write("L%i\r"%e)
+        yield dev.write("L%i\r\n"%e)
         ans = yield dev.read()
         returnValue(ans)
 
     @setting(111, nKbytes='i', returns='s')
     def load_ram(self,c,nKbytes):
         dev=self.selectedDevice(c)
-        yield dev.write("Y%i\r"%nKbytes)
+        yield dev.write("Y%i\r\n"%nKbytes)
         ans = yield dev.read()
         returnValue(ans)
 
     @setting(112, nKbytes='i', returns='s')
     def dump_ram(self,c,nKbytes):
         dev=self.selectedDevice(c)
-        yield dev.write("Z%i\r"%nKbytes)
+        yield dev.write("Z%i\r\n"%nKbytes)
         ans = yield dev.read()
         returnValue(ans)
         

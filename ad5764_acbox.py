@@ -30,19 +30,9 @@ timeout = 20
 ### END NODE INFO
 """
 
-print("""
-###############################################################
-## Warning: this server has been updated but not yet tested. ##
-## It will likely not work perfectly. It will be tested and  ##
-## updated in the near future when I am able to get a setup  ##
-## running for testing it with an ACBOX device.              ##
-###############################################################
-""")
-
-
 import platform
 global serial_server_name
-serial_server_name = (platform.node() + '_serial_server').lower().replace(' ','_').replace('-','_')
+serial_server_name = (platform.node() + '_serial_server').replace('-','_').lower()
 
 global port_to_int,int_to_port
 port_to_int = {'X1':0,'Y1':1,'X2':2,'Y2':3}
@@ -54,31 +44,25 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 import labrad.units as units
 from labrad.types import Value
 import time
-TIMEOUT = Value(5,'s')
-BAUD    = 115200
 
-# this is the server name under which devices of this type are stored in the registry.
-global serverNameAD5764_ACBOX; serverNameAD5764_ACBOX = "ad5764_acbox"
+TIMEOUT = Value(5,'s')
+BAUD    = 19200
 
 class AD5764AcboxWrapper(DeviceWrapper):
 
     @inlineCallbacks
     def connect(self, server, port):
-        """Connect to a device"""
-        print("Connecting to '%s' on port '%s'"%(server.name,port))
+        """Connect to a device."""
+        print 'connecting to "%s" on port "%s"...' % (server.name, port),
         self.server = server
-        self.ctx    = server.context()
-        self.port   = port
-
+        self.ctx = server.context()
+        self.port = port
         p = self.packet()
         p.open(port)
-        print("opened on port '%s'"%port)
-
-        p.baudrate(BAUD)   # set BAUDRATE
-        p.read()           # clear buffer
-        p.timeout(TIMEOUT) # sets timeout
-
-        print("Connected.")
+        p.baudrate(BAUD)
+        p.read()  # clear out the read buffer
+        p.timeout(TIMEOUT)
+        print(" CONNECTED ")
         yield p.send()
         
     def packet(self):
@@ -113,83 +97,42 @@ class AD5764AcboxWrapper(DeviceWrapper):
 
 
 class AD5764AcboxServer(DeviceServer):
-    name             = serverNameAD5764_ACBOX
+    name             = 'ad5764_acbox'
     deviceName       = 'Arduino Acbox'
     deviceWrapper    = AD5764AcboxWrapper
     clock_multiplier = 5
 
     @inlineCallbacks
     def initServer(self):
-        print 'Loading config from registry...',
+        print 'loading config info...',
         self.reg = self.client.registry()
         yield self.loadConfigInfo()
-        print 'Finished.'
-        print("Serial links found: %s"%str(self.serialLinks))
+        print 'done.'
+        print self.serialLinks
         yield DeviceServer.initServer(self)
 
     @inlineCallbacks
     def loadConfigInfo(self):
-        """Loads port/device info from the registry"""
-
-        reg = self.reg
-        yield reg.cd(['', 'Servers', serverNameAD5764_ACBOX, 'Links'], True)
-        dirs, keys = yield reg.dir()
-        p = reg.packet()
-        print " created packet"
-        print "printing all the keys",keys
-        for k in keys:
-            print "k=",k
-            p.get(k, key=k)
-            
-        ans = yield p.send()
-        print "ans=",ans
-        self.serialLinks = dict((k, ans[k]) for k in keys)
-
+        from labrad.wrappers import connectAsync
+        cxn=yield connectAsync()
+        reg=cxn.registry
+        context = yield cxn.context()
+        self.serialLinks = {}
+        print('SERVERS:',self.client.servers.keys())
     
     @inlineCallbacks
     def findDevices(self):
-        """Gets list of devices whose ports are active (available devices.)"""
+        server  = self.client.servers[serial_server_name]
+        manager = self.client.serial_device_manager
+        ports = yield manager.list_ad5764_acbox_devices()
+
         devs = []
         self.voltages = []
-        dev_number = 0
-
-        for name, (serialServer, port) in self.serialLinks.items():
-            if serialServer not in self.client.servers:
-                print("Error: serial server (%s) not found. Device '%s' on port '%s' not active."%(serialServer,name,port))
-                continue
-
-            print('\n')
-            ports = yield self.client[serialServer].list_serial_ports()
-            print("Trying device %s on server %s with port %s"%(name,serialServer,port))
-            if port not in ports:
-                print("Device %s on server %s with port %s not available: port %s is not active."%(name,serialServer,port,port))
-                continue
-            print("Device %s with port %s on server %s succesfully connected"%(name,port,serialServer))
-
-            devName = '%s (%s)'%(self.name,port)
-            devs          += [(devName, (self.client[serialServer],port))]
-            self.voltages.append([port]+['unknown' for pos in range(6)])
-            #print(self.voltages[0])
-            #self.voltages.append([port]+['unknown' for pos in range(6)])
-            dev_number += 1
-            
-
+        for port in ports:
+            devs.append(('acbox (%s)'%port[0],(server,port[0])))
+            self.voltages.append([port[0]]+['unknown' for pos in range(6)])
+            # entries of voltages[i] are [port, x1, y1, x2, y2, frequency, phase]
         returnValue(devs)
-
-    # old findDevices function
-    #@inlineCallbacks
-    #def findDevices(self):
-    #    server  = self.client.servers[serial_server_name]
-    #    manager = self.client.serial_device_manager
-    #    ports = yield manager.list_ad5764_acbox_devices()
-
-    #    devs = []
-    #    self.voltages = []
-    #    for port in ports:
-    #        devs.append(('acbox (%s)'%port[0],(server,port[0])))
-    #        self.voltages.append([port[0]]+['unknown' for pos in range(6)])
-    #        # entries of voltages[i] are [port, x1, y1, x2, y2, frequency, phase]
-    #    returnValue(devs)
 
     @setting(100)
     def connect(self,c,server,port):
@@ -343,9 +286,6 @@ Channel must be either "X1" "Y1" "X2" or "Y2\""""
         """Causes the server to query the device for its current settings. Usage is read_settings()
 It's only necessary to call this once on startup, as the server keeps track of the changes made."""
         dev=self.selectedDevice(c)
-        #print(self.voltages)
-        #print(c['device'])
-        #print(c.keys())
         for n in range(4):
             yield dev.write("GET,%s\r"%int_to_port[n])
             ans = yield dev.read()

@@ -16,7 +16,7 @@
 """
 ### BEGIN NODE INFO
 [info]
-name = ILM 221
+name = ILM 221 Cryogen Level Meter
 version = 1.0
 description =
 [startup]
@@ -89,7 +89,7 @@ class ILM221Wrapper(DeviceWrapper):
         
 
 class ILM221Server(DeviceServer):
-    name = 'ILM 221'
+    name = 'ilm221_cryogen_meter'
     deviceName = 'ILM221 Cryogen Level Meter'
     deviceWrapper = ILM221Wrapper
 
@@ -165,89 +165,89 @@ class ILM221Server(DeviceServer):
     @setting(101, mode='i',returns='s')
     def set_control(self,c,mode):
         dev=self.selectedDevice(c)
-        yield dev.write("C%i\r"%mode)
+        yield dev.write("C%i\r\n"%mode)
         ans = yield dev.read()
         returnValue(ans)
 
     @setting(102, comm='i')
     def set_comm_protocol(self,c,comm):
         dev=self.selectedDevice(c)
-        yield dev.write("Q%i\r"%comm)
+        yield dev.write("Q%i\r\n"%comm)
 
     @setting(103, channel='i', returns='s')
     def read_channel(self,c,channel):
         dev=self.selectedDevice(c)
-        yield dev.write("R%i\r"%channel)
+        yield dev.write("R%i\r\n"%channel)
         ans = yield dev.read()
         returnValue(ans)
 
     @setting(104, key='i', returns='s')
     def unlock(self,c,key):
         dev=self.selectedDevice(c)
-        yield dev.write("U%i\r"%key)
+        yield dev.write("U%i\r\n"%key)
         ans = yield dev.read()
         returnValue(ans)
 
     @setting(105, returns='s')
     def version(self,c):
         dev=self.selectedDevice(c)
-        yield dev.write("V\r")
+        yield dev.write("V\r\n")
         ans = yield dev.read()
         returnValue(ans)
 
     @setting(106, time='i', returns='s')
     def wait(self,c,time):
         dev=self.selectedDevice(c)
-        yield dev.write("W%i\r"%time)
+        yield dev.write("W%i\r\n"%time)
         ans = yield dev.read()
         returnValue(ans)
 
     @setting(107, returns='s')
     def status(self,c):
         dev=self.selectedDevice(c)
-        yield dev.write("X\r")
+        yield dev.write("X\r\n")
         ans = yield dev.read()
         returnValue(ans)
 
     @setting(108, channel='i', returns='s')
     def set_panelDisplay(self,c,channel):
         dev=self.selectedDevice(c)
-        yield dev.write("F%i\r"%channel)
+        yield dev.write("F%i\r\n"%channel)
         ans = yield dev.read()
         returnValue(ans)
 
     @setting(109, position='i', returns='s')
     def set_steeperMotorPosition(self,c,position):
         dev=self.selectedDevice(c)
-        yield dev.write("G%i\r"%position)
+        yield dev.write("G%i\r\n"%position)
         ans = yield dev.read()
         returnValue(ans)
 
     @setting(110, channel='i', returns='s')
     def slow(self,c,channel):
         dev=self.selectedDevice(c)
-        yield dev.write("S%i\r"%channel)
+        yield dev.write("S%i\r\n"%channel)
         ans = yield dev.read()
         returnValue(ans)
 
     @setting(111, channel='i', returns='s')
     def fast(self,c,channel):
         dev=self.selectedDevice(c)
-        yield dev.write("T%i\r"%channel)
+        yield dev.write("T%i\r\n"%channel)
         ans = yield dev.read()
         returnValue(ans)
 
     @setting(112, nKbytes='i', returns='s')
     def load_ram(self,c,nKbytes):
         dev=self.selectedDevice(c)
-        yield dev.write("Y%i\r"%nKbytes)
+        yield dev.write("Y%i\r\n"%nKbytes)
         ans = yield dev.read()
         returnValue(ans)
 
     @setting(113, nKbytes='i', returns='s')
     def dump_ram(self,c,nKbytes):
         dev=self.selectedDevice(c)
-        yield dev.write("Z%i\r"%nKbytes)
+        yield dev.write("Z%i\r\n"%nKbytes)
         ans = yield dev.read()
         returnValue(ans)
 

@@ -16,7 +16,7 @@
 """
 ### BEGIN NODE INFO
 [info]
-name = LakeShore 350
+name = Lake Shore 350 temperature controller
 version = 1.0
 description =
 [startup]
@@ -96,7 +96,7 @@ class LakeShore350Wrapper(DeviceWrapper):
         
 
 class LakeShore350Server(DeviceServer):
-    name = 'LakeShore 350'
+    name = 'lakeshore_350'
     deviceName = 'Lake Shore 350 temperature controller'
     deviceWrapper = LakeShore350Wrapper
 

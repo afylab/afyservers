@@ -80,7 +80,7 @@ class SerialServer(LabradServer):
         """
         self.SerialPorts = []
         print 'Searching for COM ports:'
-        for a in range(1, 50):
+        for a in range(1, 20):
             COMexists = True
             dev_name = 'COM{}'.format(a)
             dev_path = r'\\.\{}'.format(dev_name)

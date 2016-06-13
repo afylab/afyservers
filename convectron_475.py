@@ -16,7 +16,7 @@
 """
 ### BEGIN NODE INFO
 [info]
-name = Pressure Servo
+name = Convectron 475
 version = 1.0
 description =
 [startup]
@@ -39,9 +39,10 @@ import labrad.units as units
 from labrad.types import Value
 
 TIMEOUT = Value(5,'s')
-BAUD    = 115200
+BAUD = 19200
 
-class PressureServoWrapper(DeviceWrapper):
+
+class Convectron475Wrapper(DeviceWrapper):
 
     @inlineCallbacks
     def connect(self, server, port):
@@ -58,7 +59,7 @@ class PressureServoWrapper(DeviceWrapper):
         p.timeout(TIMEOUT)
         print(" CONNECTED ")
         yield p.send()
-        
+
     def packet(self):
         """Create a packet in our private context."""
         return self.server.packet(context=self.ctx)
@@ -69,7 +70,7 @@ class PressureServoWrapper(DeviceWrapper):
 
     @inlineCallbacks
     def write(self, code):
-        """Write a data value to the heat switch."""
+        """Write a data value to the temperature controller."""
         yield self.packet().write(code).send()
 
     @inlineCallbacks
@@ -87,12 +88,12 @@ class PressureServoWrapper(DeviceWrapper):
         p.read_line()
         ans = yield p.send()
         returnValue(ans.read_line)
-        
 
-class PressureServoServer(DeviceServer):
-    name = 'Pressure Servo'
-    deviceName = 'Pressure Servo'
-    deviceWrapper = PressureServoWrapper
+
+class Convectron475Server(DeviceServer):
+    name = 'Convectron 475'
+    deviceName = 'Convectron 475'
+    deviceWrapper = Convectron475Wrapper
 
     @inlineCallbacks
     def initServer(self):
@@ -113,7 +114,7 @@ class PressureServoServer(DeviceServer):
         # ans = yield p.send()
         # self.serialLinks = ans['links']
         reg = self.reg
-        yield reg.cd(['', 'Servers', 'Pressure Servo', 'Links'], True)
+        yield reg.cd(['', 'Servers', 'Convectron350', 'Links'], True)
         dirs, keys = yield reg.dir()
         p = reg.packet()
         print " created packet"
@@ -121,7 +122,7 @@ class PressureServoServer(DeviceServer):
         for k in keys:
             print "k=",k
             p.get(k, key=k)
-            
+
         ans = yield p.send()
         print "ans=",ans
         self.serialLinks = dict((k, ans[k]) for k in keys)
@@ -154,41 +155,53 @@ class PressureServoServer(DeviceServer):
             devName = '%s - %s' % (serServer, port)
             devs += [(devName, (server, port))]
 
-       # devs += [(0,(3,4))]
+        # devs += [(0,(3,4))]
         returnValue(devs)
-    
+
     @setting(100)
-    def connect(self,c,server,port):
+    def connect(self, c, server, port):
         dev=self.selectedDevice(c)
         yield dev.connect(server,port)
 
-    @setting(101, pressure='v')
-    def update(self,c,pressure):
+    @setting(101, returns='s')
+    def read_pressure(self,c):
+        """Read Convectron Gauge pressure response."""
         dev=self.selectedDevice(c)
-        yield dev.write("UPDATE,%i\r"%pressure)
+        yield dev.write("RD\r")
+        ans = yield dev.read()
+        returnValue(ans)
 
-    @setting(102, pressure='v')
-    def set_target(self,c,pressure):
-        dev=self.selectedDevice(c)
-        yield dev.write("SET_TARGET,%f\r"%pressure)
+    @setting(102, returns='s')
+    def id(self, c):
+        """Get the serial number of the 475 Controller."""
+        dev = self.selectedDevice(c)
+        yield dev.write("SN\r")
+        ans = yield dev.read()
+        returnValue(ans)
 
-    @setting(103, direction='i', steps='i')
-    def rotate(self,c,direction,steps):
-        dev=self.selectedDevice(c)
-        yield dev.write("ROTATE,%i,%i\r"%(direction,steps))
-        
-    @setting(9001,v='v')
+    @setting(103, returns='s')
+    def id(self, c):
+        """Identifies the selected units of pressure."""
+        dev = self.selectedDevice(c)
+        yield dev.write("RU\r")
+        ans = yield dev.read()
+        returnValue(ans)
+
+    @setting(9001, v='v')
     def do_nothing(self,c,v):
         pass
+
     @setting(9002)
-    def read(self,c):
+    def read(self, c):
         dev=self.selectedDevice(c)
         ret=yield dev.read()
         returnValue(ret)
+
     @setting(9003)
-    def write(self,c,phrase):
+    def write(self, c, phrase):
         dev=self.selectedDevice(c)
         yield dev.write(phrase)
+
     @setting(9004)
     def query(self,c,phrase):
         dev=self.selectedDevice(c)
@@ -196,8 +209,8 @@ class PressureServoServer(DeviceServer):
         ret = yield dev.read()
         returnValue(ret)
 
-    
-__server__ = PressureServoServer()
+
+__server__ = Convectron475Server()
 
 if __name__ == '__main__':
     from labrad import util
