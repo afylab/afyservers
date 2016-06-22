@@ -16,7 +16,7 @@
 """
 ### BEGIN NODE INFO
 [info]
-name = AD5764 DCBOX
+name = DCBOX QUAD AD5780
 version = 1.0
 description = DCBOX control
 
@@ -43,8 +43,8 @@ from labrad.types import Value
 TIMEOUT = Value(5,'s')
 BAUD    = 115200
 
-class AD5764DcboxWrapper(DeviceWrapper):
-    channels = [0,1,2,3,4,5,6,7]
+class QuadAD5780DcboxWrapper(DeviceWrapper):
+    channels = [0,1,2,3]
 
     @inlineCallbacks
     def connect(self, server, port):
@@ -89,29 +89,15 @@ class AD5764DcboxWrapper(DeviceWrapper):
         p.read_line()
         ans = yield p.send()
         returnValue(ans.read_line)
-
-    @inlineCallbacks
-    def set_voltage(self,channel,voltage):
-        if channel not in self.channels:
-            print("ERROR: invalid channel")
-            raise
-        if abs(voltage)>10.0:
-            print("ERROR: invalid voltage. Must be between -10.0 and 10.0")
-            raise
-        yield self.packet().write("SET,%i,%f\r"%(channel,voltage)).send()
-        p=self.packet()
-        p.read_line()
-        ans = yield p.send()
-        returnValue(ans.read_line)
         
 
 
-class AD5764DcboxServer(DeviceServer):
-    name = 'AD5764 DCBOX'
+class QuadAD5764DcboxServer(DeviceServer):
+    name = 'DCBOX QUAD AD5780'
     deviceName = 'Arduino Dcbox'
-    deviceWrapper = AD5764DcboxWrapper
+    deviceWrapper = QuadAD5780DcboxWrapper
 
-    channels = [0,1,2,3,4,5,6,7]
+    channels = [0,1,2,3]
 
 
     @inlineCallbacks
@@ -125,24 +111,56 @@ class AD5764DcboxServer(DeviceServer):
 
     @inlineCallbacks
     def loadConfigInfo(self):
-        from labrad.wrappers import connectAsync
-        cxn=yield connectAsync()
-        reg=cxn.registry
-        context = yield cxn.context()
-        self.serialLinks = {}
-        print('SERVERS:',self.client.servers.keys())
-    
+        """Load configuration information from the registry."""
+        # reg = self.client.registry
+        # p = reg.packet()
+        # p.cd(['', 'Servers', 'Heat Switch'], True)
+        # p.get('Serial Links', '*(ss)', key='links')
+        # ans = yield p.send()
+        # self.serialLinks = ans['links']
+        reg = self.reg
+        yield reg.cd(['', 'Servers', 'Quad AD5780', 'Links'], True)
+        dirs, keys = yield reg.dir()
+        p = reg.packet()
+        print " created packet"
+        print "printing all the keys",keys
+        for k in keys:
+            print "k=",k
+            p.get(k, key=k)
+            
+        ans = yield p.send()
+        print "ans=",ans
+        self.serialLinks = dict((k, ans[k]) for k in keys)
+
+
     @inlineCallbacks
     def findDevices(self):
-        server  = self.client[serial_server_name]
-        manager = self.client.serial_device_manager
-        ports = yield manager.list_ad5764_dcbox_devices()
-
+        """Find available devices from list stored in the registry."""
         devs = []
-        self.voltages = []
-        for port in ports:
-            devs.append(('dcbox (%s)'%port[0],(server,port[0])))
-            self.voltages.append([port[0]]+['unknown' for pos in range(8)])
+        # for name, port in self.serialLinks:
+        # if name not in self.client.servers:
+        # continue
+        # server = self.client[name]
+        # ports = yield server.list_serial_ports()
+        # if port not in ports:
+        # continue
+        # devName = '%s - %s' % (name, port)
+        # devs += [(devName, (server, port))]
+        # returnValue(devs)
+        for name, (serServer, port) in self.serialLinks.items():
+            if serServer not in self.client.servers:
+                continue
+            server = self.client[serServer]
+            print server
+            print port
+            ports = yield server.list_serial_ports()
+            print ports
+            if port not in ports:
+                continue
+            devName = '%s - %s' % (serServer, port)
+            devs += [(devName, (server, port))]
+
+       # devs += [(0,(3,4))]
         returnValue(devs)
 
     
@@ -151,35 +169,63 @@ class AD5764DcboxServer(DeviceServer):
         dev=self.selectedDevice(c)
         yield dev.connect(server,port)
 
-    @setting(200,port='i',voltage='v',returns='s')
+    @setting(102)
+    def initialize(self,c):
+        dev=self.selectedDevice(c)
+        yield dev.write("INITIALIZE\r")
+
+    @setting(103,port='i',voltage='v',returns='s')
     def set_voltage(self,c,port,voltage):
         #print(dir(c))
-        if not (port in range(8)):
+        if not (port in range(4)):
             returnValue("Error: invalid port number.")
             return
         if (voltage > 10) or (voltage < -10):
             returnValue("Error: invalid voltage. It must be between -10 and 10.")
             return
         dev=self.selectedDevice(c)
-        ans=yield dev.set_voltage(port,voltage)
-
-        # port+1 since the first entry is the COM number
-        self.voltages[c['device']][port+1] = ans.partition(' TO ')[2][:-1]
+        yield dev.write("SET,%i,%f\r"%(port,voltage))
+        ans = yield dev.read()
         returnValue(ans)
 
-    @setting(8998)
-    def read_voltages(self,c):
-        dev=self.selectedDevice(c)
-        for port in range(8):
-            yield dev.write("GET_DAC,%i\r"%port)
-            ans = yield dev.read()
-            self.voltages[c['device']][port+1] = ans
-        returnValue("DONE")
 
-    @setting(8999)
-    def get_voltages(self,c):
-        ret = yield self.voltages
-        returnValue(ret)
+    @setting(104,port='i',returns='s')
+    def get_voltage(self,c,port):
+        dev=self.selectedDevice(c)
+        if not (port in range(4)):
+            returnValue("Error: invalid port number.")
+            return
+        yield dev.write("GET_DAC,%i\r"%port)
+        ans = yield dev.read()
+        returnValue(ans)
+
+    @setting(105,port='i',ivoltage='v',fvoltage='v',steps='i',delay='i',returns='s')
+    def ramp1(self,c,port,ivoltage,fvoltage,steps,delay):
+        dev=self.selectedDevice(c)
+        yield dev.write("RAMP1,%i,%f,%f,%i,%i\r"%(port,ivoltage,fvoltage,steps,delay))
+        ans = yield dev.read()
+        returnValue(ans)
+
+    @setting(106,port1='i',port2='i',ivoltage1='v',ivoltage2='v',fvoltage1='v',fvoltage2='v',steps='i',delay='i',returns='s')
+    def ramp2(self,c,port1,port2,ivoltage1,ivoltage2,fvoltage1,fvoltage2,steps,delay):
+        dev=self.selectedDevice(c)
+        yield dev.write("RAMP2,%i,%i,%f,%f,%f,%f,%i,%i\r"%(port1,port2,ivoltage1,ivoltage2,fvoltage1,fvoltage2,steps,delay))
+        ans = yield dev.read()
+        returnValue(ans)
+
+    @setting(107,returns='s')
+    def id(self,c):
+        dev=self.selectedDevice(c)
+        yield dev.write("*IDN?\r")
+        ans = yield dev.read()
+        returnValue(ans)
+
+    @setting(108,returns='s')
+    def ready(self,c):
+        dev=self.selectedDevice(c)
+        yield dev.write("*RDY?\r")
+        ans = yield dev.read()
+        returnValue(ans)
         
     @setting(9001,v='v')
     def do_nothing(self,c,v):
@@ -201,7 +247,7 @@ class AD5764DcboxServer(DeviceServer):
         returnValue(ret)
 
     
-__server__ = AD5764DcboxServer()
+__server__ = QuadAD5764DcboxServer()
 
 if __name__ == '__main__':
     from labrad import util

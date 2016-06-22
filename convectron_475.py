@@ -16,14 +16,12 @@
 """
 ### BEGIN NODE INFO
 [info]
-name = AD5764 DCBOX
+name = Convectron 475
 version = 1.0
-description = DCBOX control
-
+description =
 [startup]
 cmdline = %PYTHON% %FILE%
 timeout = 20
-
 [shutdown]
 message = 987654321
 timeout = 20
@@ -32,7 +30,7 @@ timeout = 20
 
 import platform
 global serial_server_name
-serial_server_name = (platform.node() + "_serial_server").replace("-","_").lower()
+serial_server_name = platform.node() + '_serial_server'
 
 from labrad.server import setting
 from labrad.devices import DeviceServer,DeviceWrapper
@@ -41,10 +39,10 @@ import labrad.units as units
 from labrad.types import Value
 
 TIMEOUT = Value(5,'s')
-BAUD    = 115200
+BAUD = 19200
 
-class AD5764DcboxWrapper(DeviceWrapper):
-    channels = [0,1,2,3,4,5,6,7]
+
+class Convectron475Wrapper(DeviceWrapper):
 
     @inlineCallbacks
     def connect(self, server, port):
@@ -55,12 +53,13 @@ class AD5764DcboxWrapper(DeviceWrapper):
         self.port = port
         p = self.packet()
         p.open(port)
+        print 'opened on port "%s"' %self.port
         p.baudrate(BAUD)
         p.read()  # clear out the read buffer
         p.timeout(TIMEOUT)
         print(" CONNECTED ")
         yield p.send()
-        
+
     def packet(self):
         """Create a packet in our private context."""
         return self.server.packet(context=self.ctx)
@@ -71,7 +70,7 @@ class AD5764DcboxWrapper(DeviceWrapper):
 
     @inlineCallbacks
     def write(self, code):
-        """Write a data value to the heat switch."""
+        """Write a data value to the temperature controller."""
         yield self.packet().write(code).send()
 
     @inlineCallbacks
@@ -90,29 +89,11 @@ class AD5764DcboxWrapper(DeviceWrapper):
         ans = yield p.send()
         returnValue(ans.read_line)
 
-    @inlineCallbacks
-    def set_voltage(self,channel,voltage):
-        if channel not in self.channels:
-            print("ERROR: invalid channel")
-            raise
-        if abs(voltage)>10.0:
-            print("ERROR: invalid voltage. Must be between -10.0 and 10.0")
-            raise
-        yield self.packet().write("SET,%i,%f\r"%(channel,voltage)).send()
-        p=self.packet()
-        p.read_line()
-        ans = yield p.send()
-        returnValue(ans.read_line)
-        
 
-
-class AD5764DcboxServer(DeviceServer):
-    name = 'AD5764 DCBOX'
-    deviceName = 'Arduino Dcbox'
-    deviceWrapper = AD5764DcboxWrapper
-
-    channels = [0,1,2,3,4,5,6,7]
-
+class Convectron475Server(DeviceServer):
+    name = 'Convectron 475'
+    deviceName = 'Convectron 475'
+    deviceWrapper = Convectron475Wrapper
 
     @inlineCallbacks
     def initServer(self):
@@ -125,74 +106,102 @@ class AD5764DcboxServer(DeviceServer):
 
     @inlineCallbacks
     def loadConfigInfo(self):
-        from labrad.wrappers import connectAsync
-        cxn=yield connectAsync()
-        reg=cxn.registry
-        context = yield cxn.context()
-        self.serialLinks = {}
-        print('SERVERS:',self.client.servers.keys())
-    
+        """Load configuration information from the registry."""
+        # reg = self.client.registry
+        # p = reg.packet()
+        # p.cd(['', 'Servers', 'Heat Switch'], True)
+        # p.get('Serial Links', '*(ss)', key='links')
+        # ans = yield p.send()
+        # self.serialLinks = ans['links']
+        reg = self.reg
+        yield reg.cd(['', 'Servers', 'Convectron350', 'Links'], True)
+        dirs, keys = yield reg.dir()
+        p = reg.packet()
+        print " created packet"
+        print "printing all the keys",keys
+        for k in keys:
+            print "k=",k
+            p.get(k, key=k)
+
+        ans = yield p.send()
+        print "ans=",ans
+        self.serialLinks = dict((k, ans[k]) for k in keys)
+
+
     @inlineCallbacks
     def findDevices(self):
-        server  = self.client[serial_server_name]
-        manager = self.client.serial_device_manager
-        ports = yield manager.list_ad5764_dcbox_devices()
-
+        """Find available devices from list stored in the registry."""
         devs = []
-        self.voltages = []
-        for port in ports:
-            devs.append(('dcbox (%s)'%port[0],(server,port[0])))
-            self.voltages.append([port[0]]+['unknown' for pos in range(8)])
+        # for name, port in self.serialLinks:
+        # if name not in self.client.servers:
+        # continue
+        # server = self.client[name]
+        # ports = yield server.list_serial_ports()
+        # if port not in ports:
+        # continue
+        # devName = '%s - %s' % (name, port)
+        # devs += [(devName, (server, port))]
+        # returnValue(devs)
+        for name, (serServer, port) in self.serialLinks.items():
+            if serServer not in self.client.servers:
+                continue
+            server = self.client[serServer]
+            print server
+            print port
+            ports = yield server.list_serial_ports()
+            print ports
+            if port not in ports:
+                continue
+            devName = '%s - %s' % (serServer, port)
+            devs += [(devName, (server, port))]
+
+        # devs += [(0,(3,4))]
         returnValue(devs)
 
-    
     @setting(100)
-    def connect(self,c,server,port):
+    def connect(self, c, server, port):
         dev=self.selectedDevice(c)
         yield dev.connect(server,port)
 
-    @setting(200,port='i',voltage='v',returns='s')
-    def set_voltage(self,c,port,voltage):
-        #print(dir(c))
-        if not (port in range(8)):
-            returnValue("Error: invalid port number.")
-            return
-        if (voltage > 10) or (voltage < -10):
-            returnValue("Error: invalid voltage. It must be between -10 and 10.")
-            return
+    @setting(101, returns='s')
+    def read_pressure(self,c):
+        """Read Convectron Gauge pressure response."""
         dev=self.selectedDevice(c)
-        ans=yield dev.set_voltage(port,voltage)
-
-        # port+1 since the first entry is the COM number
-        self.voltages[c['device']][port+1] = ans.partition(' TO ')[2][:-1]
+        yield dev.write("RD\r")
+        ans = yield dev.read()
         returnValue(ans)
 
-    @setting(8998)
-    def read_voltages(self,c):
-        dev=self.selectedDevice(c)
-        for port in range(8):
-            yield dev.write("GET_DAC,%i\r"%port)
-            ans = yield dev.read()
-            self.voltages[c['device']][port+1] = ans
-        returnValue("DONE")
+    @setting(102, returns='s')
+    def id(self, c):
+        """Get the serial number of the 475 Controller."""
+        dev = self.selectedDevice(c)
+        yield dev.write("SN\r")
+        ans = yield dev.read()
+        returnValue(ans)
 
-    @setting(8999)
-    def get_voltages(self,c):
-        ret = yield self.voltages
-        returnValue(ret)
-        
-    @setting(9001,v='v')
+    @setting(103, returns='s')
+    def id(self, c):
+        """Identifies the selected units of pressure."""
+        dev = self.selectedDevice(c)
+        yield dev.write("RU\r")
+        ans = yield dev.read()
+        returnValue(ans)
+
+    @setting(9001, v='v')
     def do_nothing(self,c,v):
         pass
+
     @setting(9002)
-    def read(self,c):
+    def read(self, c):
         dev=self.selectedDevice(c)
         ret=yield dev.read()
         returnValue(ret)
+
     @setting(9003)
-    def write(self,c,phrase):
+    def write(self, c, phrase):
         dev=self.selectedDevice(c)
         yield dev.write(phrase)
+
     @setting(9004)
     def query(self,c,phrase):
         dev=self.selectedDevice(c)
@@ -200,22 +209,9 @@ class AD5764DcboxServer(DeviceServer):
         ret = yield dev.read()
         returnValue(ret)
 
-    
-__server__ = AD5764DcboxServer()
+
+__server__ = Convectron475Server()
 
 if __name__ == '__main__':
     from labrad import util
     util.runServer(__server__)
-
-
-
-
-
-
-
-
-
-
-
-
-
