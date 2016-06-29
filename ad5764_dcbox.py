@@ -16,9 +16,9 @@
 """
 ### BEGIN NODE INFO
 [info]
-name = AD5764 DCBOX
-version = 1.0
-description = DCBOX control
+name = Arduino DC box server
+version = 1.1
+description = Arduino DC box server
 
 [startup]
 cmdline = %PYTHON% %FILE%
@@ -30,122 +30,129 @@ timeout = 20
 ### END NODE INFO
 """
 
-import platform
-global serial_server_name
-serial_server_name = (platform.node() + "_serial_server").replace("-","_").lower()
-
-from labrad.server import setting
+from labrad.server import setting,Signal
 from labrad.devices import DeviceServer,DeviceWrapper
 from twisted.internet.defer import inlineCallbacks, returnValue
 import labrad.units as units
 from labrad.types import Value
 
-TIMEOUT = Value(5,'s')
-BAUD    = 115200
+class serverInfo(object):
+    def __init__(self):
+        self.deviceName = 'Arduino DC Box'
+        self.serverName = "ad5764_dcbox"
 
-class AD5764DcboxWrapper(DeviceWrapper):
-    channels = [0,1,2,3,4,5,6,7]
+    def getDeviceName(self,comPort):
+        return "%s (%s)"%(self.serverName, comPort)
+
+class arduinoDCBoxWrapper(DeviceWrapper):
 
     @inlineCallbacks
     def connect(self, server, port):
-        """Connect to a device."""
-        print 'connecting to "%s" on port "%s"...' % (server.name, port),
+        """Connect to a device"""
+        print("Connecting to '%s' on port '%s'"%(server.name,port))
         self.server = server
-        self.ctx = server.context()
-        self.port = port
+        self.ctx    = server.context()
+        self.port   = port
+
         p = self.packet()
         p.open(port)
-        p.baudrate(BAUD)
-        p.read()  # clear out the read buffer
-        p.timeout(TIMEOUT)
-        print(" CONNECTED ")
+        print("opened on port '%s'"%port)
+
+        self.BAUDRATE   = 115200
+        self.TIMEOUT    = Value(5,'s')
+
+        p.baudrate(self.BAUDRATE) # set BAUDRATE
+        p.read()                  # clear buffer
+        p.timeout(self.TIMEOUT)   # sets timeout
+
+        print("Connected.")
         yield p.send()
-        
+
     def packet(self):
-        """Create a packet in our private context."""
+        """Create a packet in our private context"""
         return self.server.packet(context=self.ctx)
 
     def shutdown(self):
-        """Disconnect from the serial port when we shut down."""
+        """Disconnect from the serial port when we shut down"""
         return self.packet().close().send()
 
     @inlineCallbacks
-    def write(self, code):
-        """Write a data value to the heat switch."""
-        yield self.packet().write(code).send()
-
-    @inlineCallbacks
-    def read(self):
-        p=self.packet()
-        p.read_line()
-        ans=yield p.send()
-        returnValue(ans.read_line)
-
-    @inlineCallbacks
-    def query(self, code):
-        """ Write, then read. """
-        p = self.packet()
-        p.write_line(code)
-        p.read_line()
-        ans = yield p.send()
-        returnValue(ans.read_line)
-
-    @inlineCallbacks
-    def set_voltage(self,channel,voltage):
-        if channel not in self.channels:
-            print("ERROR: invalid channel")
-            raise
-        if abs(voltage)>10.0:
-            print("ERROR: invalid voltage. Must be between -10.0 and 10.0")
-            raise
-        yield self.packet().write("SET,%i,%f\r"%(channel,voltage)).send()
+    def set_voltage(self,port,value):
+        if not (port in range(8)):
+            returnValue("Error: invalid channel (was <%s>, should be integer from 0 to 7)"%(port,))
+        if abs(value) > 10.0:
+            returnValue("Error: invalid voltage (was <%s>, should be between -10 and 10)")
+        yield self.packet().write("SET,%i,%f\r"%(port,value)).send()
         p=self.packet()
         p.read_line()
         ans = yield p.send()
         returnValue(ans.read_line)
-        
+
+    @inlineCallbacks
+    def get_voltage(self,port):
+        if not (port in range(8)):
+            returnValue("Error: invalid channel (was <%s>, should be integer from 0 to 7)"%(port,))
+        yield self.packet().write("GET_DAC,%s\r\n"%port).send()
+        p=self.packet()
+        p.read_line()
+        ans = yield p.send()
+        returnValue(ans.read_line)
 
 
-class AD5764DcboxServer(DeviceServer):
-    name = 'AD5764 DCBOX'
-    deviceName = 'Arduino Dcbox'
-    deviceWrapper = AD5764DcboxWrapper
+class arduinoDCBoxServer(DeviceServer):
+    info          = serverInfo()
+    name          = info.serverName
+    deviceName    = info.deviceName
+    deviceWrapper = arduinoDCBoxWrapper
 
-    channels = [0,1,2,3,4,5,6,7]
+    # Signals (server prefix 701000)
+    sPrefix=701000
+    sigChannelVoltageChanged  = Signal(sPrefix + 10,'signal__channel_voltage_changed', '*s')
+    sigChannelVoltageChanged0 = Signal(sPrefix +  0,'signal__channel_0_voltage_changed','s')
+    sigChannelVoltageChanged1 = Signal(sPrefix +  1,'signal__channel_1_voltage_changed','s')
+    sigChannelVoltageChanged2 = Signal(sPrefix +  2,'signal__channel_2_voltage_changed','s')
+    sigChannelVoltageChanged3 = Signal(sPrefix +  3,'signal__channel_3_voltage_changed','s')
+    sigChannelVoltageChanged4 = Signal(sPrefix +  4,'signal__channel_4_voltage_changed','s')
+    sigChannelVoltageChanged5 = Signal(sPrefix +  5,'signal__channel_5_voltage_changed','s')
+    sigChannelVoltageChanged6 = Signal(sPrefix +  6,'signal__channel_6_voltage_changed','s')
+    sigChannelVoltageChanged7 = Signal(sPrefix +  7,'signal__channel_7_voltage_changed','s')
+    channelSignals=[sigChannelVoltageChanged0,sigChannelVoltageChanged1,sigChannelVoltageChanged2,sigChannelVoltageChanged3,sigChannelVoltageChanged4,sigChannelVoltageChanged5,sigChannelVoltageChanged6,sigChannelVoltageChanged7]
 
+    validPorts = [0,1,2,3,4,5,6,7]
 
     @inlineCallbacks
     def initServer(self):
-        print 'loading config info...',
+        print("Server <%s> of type <%s>"%(self.name,self.deviceName))
         self.reg = self.client.registry()
         yield self.loadConfigInfo()
-        print 'done.'
-        print self.serialLinks
+        print(self.serialLinks)
         yield DeviceServer.initServer(self)
 
     @inlineCallbacks
     def loadConfigInfo(self):
-        from labrad.wrappers import connectAsync
-        cxn=yield connectAsync()
-        reg=cxn.registry
-        context = yield cxn.context()
-        self.serialLinks = {}
-        print('SERVERS:',self.client.servers.keys())
-    
+        """Loads port/device info from the registry"""
+        yield self.reg.cd(['','Servers',self.name,'Links'],True)
+        dirs,keys = yield self.reg.dir()
+        print("Found devices: %s"%(keys,))
+        p   = self.reg.packet()
+        for k in keys:p.get(k,key=k)
+        ans = yield p.send()
+        self.serialLinks = dict((k, ans[k]) for k in keys)
+
     @inlineCallbacks
     def findDevices(self):
-        server  = self.client[serial_server_name]
-        manager = self.client.serial_device_manager
-        ports = yield manager.list_ad5764_dcbox_devices()
-
-        devs = []
-        self.voltages = []
-        for port in ports:
-            devs.append(('dcbox (%s)'%port[0],(server,port[0])))
-            self.voltages.append([port[0]]+['unknown' for pos in range(8)])
+        """Gets list of devices whose ports are active (available devices.)"""
+        devs=[]
+        for name,(serialServer,port) in self.serialLinks.items():
+            if serialServer not in self.client.servers:
+                print("Error: serial server (%s) not found. Device '%s' on port '%s' not active."%(serialServer,name,port))
+                continue
+            ports = yield self.client[serialServer].list_serial_ports()
+            if port not in ports:
+                continue
+            devs += [(self.info.getDeviceName(port),(self.client[serialServer],port))]
         returnValue(devs)
 
-    
     @setting(100)
     def connect(self,c,server,port):
         dev=self.selectedDevice(c)
@@ -153,69 +160,62 @@ class AD5764DcboxServer(DeviceServer):
 
     @setting(200,port='i',voltage='v',returns='s')
     def set_voltage(self,c,port,voltage):
-        #print(dir(c))
-        if not (port in range(8)):
-            returnValue("Error: invalid port number.")
-            return
-        if (voltage > 10) or (voltage < -10):
+        """Sets the voltage at <port> to <voltage>"""
+        if not (port in self.validPorts):
+            returnValue("Error: invalid port. Port must be from 0 to 7.")
+        if (voltage>10) or (voltage < -10):
             returnValue("Error: invalid voltage. It must be between -10 and 10.")
-            return
-        dev=self.selectedDevice(c)
-        ans=yield dev.set_voltage(port,voltage)
 
-        # port+1 since the first entry is the COM number
-        self.voltages[c['device']][port+1] = ans.partition(' TO ')[2][:-1]
+        dev = self.selectedDevice(c)
+        ans = yield dev.set_voltage(port,voltage)
+        val = ans.lower().partition(' to ')[2]
+        yield self.sigChannelVoltageChanged([str(port),val]) # general signal
+        yield self.channelSignals[port](val)                 # port specific signal
         returnValue(ans)
 
-    @setting(8998)
-    def read_voltages(self,c):
-        dev=self.selectedDevice(c)
-        for port in range(8):
-            yield dev.write("GET_DAC,%i\r"%port)
-            ans = yield dev.read()
-            self.voltages[c['device']][port+1] = ans
-        returnValue("DONE")
+    @setting(201,voltage='v',returns='*s')
+    def set_all_voltages(self,c,voltage):
+        """Sets all ports to <voltage>"""
+        if (voltage > 10) or (voltage < -10):
+            returnValue("Error: invalid voltage. It must be between -10 and 10.")
 
-    @setting(8999)
-    def get_voltages(self,c):
-        ret = yield self.voltages
-        returnValue(ret)
-        
-    @setting(9001,v='v')
-    def do_nothing(self,c,v):
-        pass
-    @setting(9002)
-    def read(self,c):
-        dev=self.selectedDevice(c)
-        ret=yield dev.read()
-        returnValue(ret)
-    @setting(9003)
-    def write(self,c,phrase):
-        dev=self.selectedDevice(c)
-        yield dev.write(phrase)
-    @setting(9004)
-    def query(self,c,phrase):
-        dev=self.selectedDevice(c)
-        yield dev.write(phrase)
-        ret = yield dev.read()
-        returnValue(ret)
+        dev = self.selectedDevice(c)
+        ans = []
+        for port in self.validPorts:
+            resp = yield dev.set_voltage(port,voltage)
+            val  = resp.lower().partition(' to ')[2]
+            self.sigChannelVoltageChanged([str(port),val])
+            self.channelSignals[port](val)
+            ans.append(resp)
+        returnValue(ans)
 
-    
-__server__ = AD5764DcboxServer()
+    @setting(210,port='i',returns='v')
+    def get_voltage(self,c,port):
+        if not (port in self.validPorts):
+            returnValue("Error: invalid port. Port must be from 0 to 7.")
+        dev = self.selectedDevice(c)
+        ans = yield dev.get_voltage(port)
+        returnValue(float(ans))
+
+    @setting(211,returns='*v')
+    def get_all(self,c):
+        ans = []
+        dev = self.selectedDevice(c)
+        for port in self.validPorts:
+            resp = yield dev.get_voltage(port)
+            ans.append(float(resp))
+        returnValue(ans)
+
+    @setting(300)
+    def send_voltage_signals(self,c):
+        dev = self.selectedDevice(c)
+        for port in self.validPorts:
+            ans = yield dev.get_voltage(port)
+            self.sigChannelVoltageChanged([str(port),ans])
+            self.channelSignals[port](ans)
+
+__server__ = arduinoDCBoxServer()
 
 if __name__ == '__main__':
     from labrad import util
     util.runServer(__server__)
-
-
-
-
-
-
-
-
-
-
-
-
-
