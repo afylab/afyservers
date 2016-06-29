@@ -238,14 +238,14 @@ class DAC_ADCServer(DeviceServer):
         ans = yield dev.read()
         returnValue(ans)
 
-    @setting(107,dacPorts='s', adcPorts='s', ivoltages='s', fvoltages='s', steps='i',delay='v[]',returns='(*v[],*v[])')
-    def buffer_ramp(self,c,dacPorts,adcPorts,ivoltages,fvoltages,steps,delay):
+    @setting(107,dacPorts='s', adcPorts='s', ivoltages='s', fvoltages='s', steps='i',delay='v[]',nReadings='i',returns='(*v[],*v[])')
+    def buffer_ramp(self,c,dacPorts,adcPorts,ivoltages,fvoltages,steps,delay,nReadings=1):
         """
         BUFFER_RAMP ramps the specified output channels from the initial voltages to the final voltages and reads the specified input channels in a synchronized manner. 
         It does it within an specified number steps and a delay (microseconds) between the update of the last output channel and the reading of the first input channel.
         """
         dev=self.selectedDevice(c)
-        yield dev.write("BUFFER_RAMP,%s,%s,%s,%s,%i,%i\r"%(dacPorts,adcPorts,ivoltages,fvoltages,steps,delay))
+        yield dev.write("BUFFER_RAMP,%s,%s,%s,%s,%i,%i,%i\r"%(dacPorts,adcPorts,ivoltages,fvoltages,steps,delay,nReadings))
 
         ch1=[]
         ch2=[]
