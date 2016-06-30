@@ -39,7 +39,7 @@ from labrad.types import Value
 class serverInfo(object):
     def __init__(self):
         self.deviceName = "Arduino QUAD DC Box"
-        self.serverName = "DCBOX QUAD AD5780"
+        self.serverName = "dcbox_quad_ad5780"
 
     def getDeviceName(self,serServer,comPort):
         return "%s - %s"%(serServer,comPort)
@@ -138,8 +138,8 @@ class QuadAD5764DcboxServer(DeviceServer):
     sPrefix = 702000
     sigChannelVoltageChanged = Signal(sPrefix+0,'signal__channel_voltage_changed','*s')
     sigInitDone              = Signal(sPrefix+1,'signal__init_done','s')
-    sigRamp1Started          = Signal(sPrefix+2,'signal__ramp_1_started')
-    sigRamp2Started          = Signal(sPrefix+3,'signal__ramp_2_started')
+    #sigRamp1Started          = Signal(sPrefix+2,'signal__ramp_1_started')
+    #sigRamp2Started          = Signal(sPrefix+3,'signal__ramp_2_started')
 
     ports = [0,1,2,3]
 
@@ -186,7 +186,8 @@ class QuadAD5764DcboxServer(DeviceServer):
     @setting(102)
     def initialize(self,c):
         dev=self.selectedDevice(c)
-        yield dev.do_init()
+        ans = yield dev.do_init()
+        self.sigInitDone(ans)
 
     @setting(103,port='i',voltage='v',returns='s')
     def set_voltage(self,c,port,voltage):
@@ -197,6 +198,7 @@ class QuadAD5764DcboxServer(DeviceServer):
             returnValue("Error: invalid voltage. It must be between -10 and 10.")
         dev=self.selectedDevice(c)
         ans = yield dev.set_voltage(port,voltage)
+        self.sigChannelVoltageChanged([str(port),ans.partition(' TO ')[2][:-1]])
         returnValue(ans)
 
     @setting(104,port='i',returns='s')
@@ -259,6 +261,13 @@ class QuadAD5764DcboxServer(DeviceServer):
         dev = self.selectedDevice(c)
         ans = yield dev.get_is_ready()
         returnValue(ans)
+
+    @setting(600)
+    def send_voltage_signals(self,c):
+        dev = self.selectedDevice(c)
+        for port in self.ports:
+            ans=yield dev.get_voltage(port)
+            self.sigChannelVoltageChanged([str(port),str(ans)])
         
     @setting(9001,v='v')
     def do_nothing(self,c,v):
