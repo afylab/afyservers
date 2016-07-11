@@ -72,7 +72,7 @@ class SerialServer(LabradServer):
             self.enumerate_serial_pyserial()
             
     def enumerate_serial_windows(self):
-        """Manually Enumerate the first 20 COM ports.
+        """Manually Enumerate the first 48 COM ports.
 
         pyserial includes a function to enumerate device names, but it
         possibly doesn't work right on windows for COM ports above 4.
@@ -80,7 +80,7 @@ class SerialServer(LabradServer):
         """
         self.SerialPorts = []
         print 'Searching for COM ports:'
-        for a in range(1, 20):
+        for a in range(1, 48):
             COMexists = True
             dev_name = 'COM{}'.format(a)
             dev_path = r'\\.\{}'.format(dev_name)
