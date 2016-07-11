@@ -41,8 +41,8 @@ class serverInfo(object):
         self.deviceName = "Arduino QUAD DC Box"
         self.serverName = "dcbox_quad_ad5780"
 
-    def getDeviceName(self,serServer,comPort):
-        return "%s - %s"%(serServer,comPort)
+    def getDeviceName(self,comPort):
+        return "%s (%s)"%(self.serverName,comPort)
 
 class QuadAD5780DcboxWrapper(DeviceWrapper):
 
@@ -173,7 +173,7 @@ class QuadAD5764DcboxServer(DeviceServer):
             ports = yield self.client[serialServer].list_serial_ports()
             if port not in ports:
                 continue
-            devs += [(self.info.getDeviceName(serialServer,port),(self.client[serialServer],port))]
+            devs += [(self.info.getDeviceName(port),(self.client[serialServer],port))]
         returnValue(devs)
 
     @setting(100)
