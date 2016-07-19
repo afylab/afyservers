@@ -16,14 +16,12 @@
 """
 ### BEGIN NODE INFO
 [info]
-name = DAC-ADC_AD5764-AD7734
-version = 1.0
-description = DCBOX control
-
+name = DAC-ADC
+version = 0.1
+description = DAC-ADC Box server: AD5764-AD7734
 [startup]
 cmdline = %PYTHON% %FILE%
 timeout = 20
-
 [shutdown]
 message = 987654321
 timeout = 20
@@ -110,7 +108,7 @@ class DAC_ADCWrapper(DeviceWrapper):
 
 
 class DAC_ADCServer(DeviceServer):
-    name = 'DAC-ADC_AD5764-AD7734'
+    name = 'DAC-ADC'
     deviceName = 'Arduino DAC-ADC'
     deviceWrapper = DAC_ADCWrapper
 
@@ -128,13 +126,6 @@ class DAC_ADCServer(DeviceServer):
 
     @inlineCallbacks
     def loadConfigInfo(self):
-        """Load configuration information from the registry."""
-        # reg = self.client.registry
-        # p = reg.packet()
-        # p.cd(['', 'Servers', 'Heat Switch'], True)
-        # p.get('Serial Links', '*(ss)', key='links')
-        # ans = yield p.send()
-        # self.serialLinks = ans['links']
         reg = self.reg
         yield reg.cd(['', 'Servers', 'dac-adc', 'Links'], True)
         dirs, keys = yield reg.dir()
@@ -154,16 +145,6 @@ class DAC_ADCServer(DeviceServer):
     def findDevices(self):
         """Find available devices from list stored in the registry."""
         devs = []
-        # for name, port in self.serialLinks:
-        # if name not in self.client.servers:
-        # continue
-        # server = self.client[name]
-        # ports = yield server.list_serial_ports()
-        # if port not in ports:
-        # continue
-        # devName = '%s - %s' % (name, port)
-        # devs += [(devName, (server, port))]
-        # returnValue(devs)
         for name, (serServer, port) in self.serialLinks.items():
             if serServer not in self.client.servers:
                 continue
@@ -203,7 +184,7 @@ class DAC_ADCServer(DeviceServer):
         returnValue(ans)
 
 
-    @setting(104,port='i',returns='s')
+    @setting(104,port='i',returns='v[]')
     def read_voltage(self,c,port):
         """
         GET_ADC returns the voltage read by an input channel. Do not confuse with GET_DAC; GET_DAC has not been implemented yet.
@@ -214,7 +195,7 @@ class DAC_ADCServer(DeviceServer):
             return
         yield dev.write("GET_ADC,%i\r"%port)
         ans = yield dev.read()
-        returnValue(ans)
+        returnValue(float(ans))
 
     @setting(105,port='i',ivoltage='v',fvoltage='v',steps='i',delay='i',returns='s')
     def ramp1(self,c,port,ivoltage,fvoltage,steps,delay):
@@ -238,7 +219,7 @@ class DAC_ADCServer(DeviceServer):
         ans = yield dev.read()
         returnValue(ans)
 
-    @setting(107,dacPorts='s', adcPorts='s', ivoltages='s', fvoltages='s', steps='i',delay='v[]',nReadings='i',returns='(*v[],*v[])')
+    @setting(107,dacPorts='s', adcPorts='s', ivoltages='s', fvoltages='s', steps='i',delay='v[]',nReadings='i',returns='b')#(*v[],*v[])')
     def buffer_ramp(self,c,dacPorts,adcPorts,ivoltages,fvoltages,steps,delay,nReadings=1):
         """
         BUFFER_RAMP ramps the specified output channels from the initial voltages to the final voltages and reads the specified input channels in a synchronized manner. 
@@ -246,20 +227,24 @@ class DAC_ADCServer(DeviceServer):
         """
         dev=self.selectedDevice(c)
         yield dev.write("BUFFER_RAMP,%s,%s,%s,%s,%i,%i,%i\r"%(dacPorts,adcPorts,ivoltages,fvoltages,steps,delay,nReadings))
+        returnValue(True)
+        
 
+    @setting(1919, steps ='i')#, returns = '(*v[], *v[])' )
+    def serial_poll(self, c, steps):
+        dev=self.selectedDevice(c)
         ch1=[]
         ch2=[]
-        x = 0
-        while x<steps*4:
-            b1=yield dev.readByte(1)
-            b2=yield dev.readByte(1)
-            b3=yield dev.readByte(1)
-            b4=yield dev.readByte(1)
+        i = 0
+        data = yield dev.readByte(steps*4)
+        data = list(data)
 
-            b1=int(b1.encode('hex'),16)
-            b2=int(b2.encode('hex'),16)
-            b3=int(b3.encode('hex'),16)
-            b4=int(b4.encode('hex'),16)
+        while i<steps*4:
+
+            b1=int(data[i].encode('hex'),16)
+            b2=int(data[i+1].encode('hex'),16)
+            b3=int(data[i+2].encode('hex'),16)
+            b4=int(data[i+3].encode('hex'),16)
 
             decimal1 = twoByteToInt(b1,b2)
             decimal2 = twoByteToInt(b3,b4)
@@ -270,17 +255,18 @@ class DAC_ADCServer(DeviceServer):
             ch1.append(voltage1)
             ch2.append(voltage2)
 
-            x+=4
-            print x
+            i+=4
+            # print x
 
         ch1_array = np.asarray((map(float,ch1)))
         ch2_array = np.asarray((map(float,ch2)))
 
         ans=np.hstack((ch1_array,ch2_array))
+
         yield dev.read()
 
         returnValue((ch1_array,ch2_array))
-
+        returnValue((ch1, ch2))
 
 
     # @setting(108,channel='i',returns='*v[]')
@@ -298,16 +284,16 @@ class DAC_ADCServer(DeviceServer):
     #     returnValue(ans_array)
 
 
-    @setting(109,time='i',returns='s')
-    def set_conversionTime(self,c,time):
+    @setting(109,channel='i',time='v[]',returns='v[]')
+    def set_conversionTime(self,c,channel,time):
         """
         CONVERT_TIME sets the conversion time for the ADC. The conversion time is the time the ADC takes to convert the analog signal to a digital signal. 
         Keep in mind that the smaller the conversion time, the more noise your measurements will have. Maximum conversion time: 2686 microseconds. Minimum conversion time: 82 microseconds.
         """
         dev=self.selectedDevice(c)
-        yield dev.write("CONVERT_TIME,i%\r"%time)
+        yield dev.write("CONVERT_TIME,%i,%f\r"%(channel,time))
         ans = yield dev.read()
-        returnValue(ans)
+        returnValue(float(ans))
 
 
     @setting(110,returns='s')
@@ -331,18 +317,17 @@ class DAC_ADCServer(DeviceServer):
         ans = yield dev.read()
         returnValue(ans)
         
-    @setting(9001,v='v')
-    def do_nothing(self,c,v):
-        pass
     @setting(9002)
     def read(self,c):
         dev=self.selectedDevice(c)
         ret=yield dev.read()
         returnValue(ret)
+
     @setting(9003)
     def write(self,c,phrase):
         dev=self.selectedDevice(c)
         yield dev.write(phrase)
+
     @setting(9004)
     def query(self,c,phrase):
         dev=self.selectedDevice(c)
@@ -354,11 +339,6 @@ class DAC_ADCServer(DeviceServer):
     def timeout(self,c,time):
         dev=self.selectedDevice(c)
         yield dev.timeout(time)
-
-    @setting(9006)
-    def readByte(self,c,count):
-        dev=self.selectedDevice(c)
-        yield dev.readByte(count)
 
 
 __server__ = DAC_ADCServer()
