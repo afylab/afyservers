@@ -154,8 +154,8 @@ class QuadAD5764DcboxServer(DeviceServer):
     sPrefix = 702000
     sigChannelVoltageChanged = Signal(sPrefix+0,'signal__channel_voltage_changed','*s')
     sigInitDone              = Signal(sPrefix+1,'signal__init_done','s')
-    #sigRamp1Started          = Signal(sPrefix+2,'signal__ramp_1_started')
-    #sigRamp2Started          = Signal(sPrefix+3,'signal__ramp_2_started')
+    sigRamp1Started          = Signal(sPrefix+2,'signal__ramp_1_started','*s')
+    sigRamp2Started          = Signal(sPrefix+3,'signal__ramp_2_started','*s')
 
     ports = [0,1,2,3]
 
@@ -250,6 +250,7 @@ class QuadAD5764DcboxServer(DeviceServer):
         dev = self.selectedDevice(c)
         dev.clearOutput()
         ans = yield dev.ramp1(port,ivoltage,fvoltage,steps,delay)
+        self.sigRamp1Started([str(port),str(ivoltage),str(fvoltage),str(steps),str(delay)])
         returnValue(ans)
 
     @setting(106,port1='i',port2='i',ivoltage1='v',ivoltage2='v',fvoltage1='v',fvoltage2='v',steps='i',delay='i',returns='s')
@@ -274,6 +275,7 @@ class QuadAD5764DcboxServer(DeviceServer):
         dev = self.selectedDevice(c)
         dev.clearOutput()
         ans = yield dev.ramp2(port1,port2,ivoltage1,ivoltage2,fvoltage1,fvoltage2,steps,delay)
+        self.sigRamp2Started([str(port1),str(port2),str(ivoltage1),str(ivoltage2),str(fvoltage1),str(fvoltage2),str(steps),str(delay)])
         returnValue(ans)
 
     @setting(107,returns='s')
