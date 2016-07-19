@@ -159,7 +159,7 @@ class arduinoDCBoxServer(DeviceServer):
 
         dev = self.selectedDevice(c)
         ans = yield dev.set_voltage(port,voltage)
-        val = ans.lower().partition(' to ')[2]
+        val = ans.lower().partition(' to ')[2][:-1]
         yield self.sigChannelVoltageChanged([str(port),val])
         returnValue(ans)
 
@@ -173,7 +173,7 @@ class arduinoDCBoxServer(DeviceServer):
         ans = []
         for port in self.validPorts:
             resp = yield dev.set_voltage(port,voltage)
-            val  = resp.lower().partition(' to ')[2]
+            val  = resp.lower().partition(' to ')[2][:-1]
             yield self.sigChannelVoltageChanged([str(port),val])
             ans.append(resp)
         returnValue(ans)
