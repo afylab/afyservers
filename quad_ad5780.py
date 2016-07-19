@@ -206,6 +206,11 @@ class QuadAD5764DcboxServer(DeviceServer):
         ans = yield dev.do_init()
         self.sigInitDone(ans)
 
+        # read new voltages & send signals post-init. Should all be zero.
+        for port in self.ports:
+            ans=yield dev.get_voltage(port)
+            self.sigChannelVoltageChanged([str(port),str(ans)])
+
     @setting(103,port='i',voltage='v',returns='s')
     def set_voltage(self,c,port,voltage):
         #print(dir(c))
@@ -262,9 +267,9 @@ class QuadAD5764DcboxServer(DeviceServer):
         if (fvoltage2>10) or (fvoltage2<-10):
             returnValue("Error: invalid fvoltage2. It must be between -10 and 10.")
         if steps<1:
-            returnValue("Error: invalud steps value. It must be at least 1.")
+            returnValue("Error: invalid steps value. It must be at least 1.")
         if delay <= 0:
-            returnValue("Error: invalud delay value. It must be greater than zero.")
+            returnValue("Error: invalid delay value. It must be greater than zero.")
 
         dev = self.selectedDevice(c)
         dev.clearOutput()
