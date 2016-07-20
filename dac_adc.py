@@ -358,6 +358,20 @@ class DAC_ADCServer(DeviceServer):
         dev=self.selectedDevice(c)
         yield dev.timeout(time)
 
+    @setting(9100)
+    def send_read_requests(self,c):
+        dev = self.selectedDevice(c)
+        yield dev.read()
+        for port in [0,1,2,3]:
+            yield dev.write("GET_ADC,%i\r"%port)
+            ans = yield dev.read()
+            self.sigInputRead([str(port),str(ans)])
+
+    # GET_DAC hasn't been added to the DAC ADC code yet
+    # @setting(9101)
+    # def send_get_dac_requests(self,c):
+    #     yield
+
 
 __server__ = DAC_ADCServer()
 
