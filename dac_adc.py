@@ -361,7 +361,6 @@ class DAC_ADCServer(DeviceServer):
     @setting(9100)
     def send_read_requests(self,c):
         dev = self.selectedDevice(c)
-        yield dev.read()
         for port in [0,1,2,3]:
             yield dev.write("GET_ADC,%i\r"%port)
             ans = yield dev.read()
