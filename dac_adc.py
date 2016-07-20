@@ -162,7 +162,7 @@ class DAC_ADCServer(DeviceServer):
             print ports
             if port not in ports:
                 continue
-            devName = '%s - %s' % (serServer, port)
+            devName = '%s (%s)' % (serServer, port)
             devs += [(devName, (server, port))]
 
        # devs += [(0,(3,4))]
