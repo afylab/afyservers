@@ -243,7 +243,7 @@ class DAC_ADCServer(DeviceServer):
         returnValue(True)
         
 
-    @setting(1919, steps ='i')#, returns = '(*v[], *v[])' )
+    @setting(1919, steps ='i', returns = '(*v[], *v[])' )
     def serial_poll(self, c, steps):
         dev=self.selectedDevice(c)
         ch1=[]
@@ -274,12 +274,9 @@ class DAC_ADCServer(DeviceServer):
         ch1_array = np.asarray((map(float,ch1)))
         ch2_array = np.asarray((map(float,ch2)))
 
-        ans=np.hstack((ch1_array,ch2_array))
-
         yield dev.read()
 
         returnValue((ch1_array,ch2_array))
-        returnValue((ch1, ch2))
 
 
     # @setting(108,channel='i',returns='*v[]')
