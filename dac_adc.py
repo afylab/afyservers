@@ -29,7 +29,7 @@ timeout = 20
 """
 
 
-from labrad.server import setting
+from labrad.server import setting, Signal
 from labrad.devices import DeviceServer,DeviceWrapper
 from twisted.internet.defer import inlineCallbacks, returnValue
 import labrad.units as units
@@ -114,6 +114,13 @@ class DAC_ADCServer(DeviceServer):
 
     channels = [0,1,2,3]
 
+    sPrefix = 703000
+    sigInputRead         = Signal(sPrefix+0,'signal__input_read'         , '*s') #
+    sigOutputSet         = Signal(sPrefix+1,'signal__output_set'         , '*s') #
+    sigRamp1Started      = Signal(sPrefix+2,'signal__ramp_1_started'     , '*s') #
+    sigRamp2Started      = Signal(sPrefix+3,'signal__ramp_2_started'     , '*s') #
+    sigConvTimeSet       = Signal(sPrefix+4,'signal__conversion_time_set', '*s') #
+    sigBufferRampStarted = Signal(sPrefix+5,'signal__buffer_ramp_started', '*s') #
 
     @inlineCallbacks
     def initServer(self):
@@ -127,7 +134,7 @@ class DAC_ADCServer(DeviceServer):
     @inlineCallbacks
     def loadConfigInfo(self):
         reg = self.reg
-        yield reg.cd(['', 'Servers', 'dac-adc', 'Links'], True)
+        yield reg.cd(['', 'Servers', 'dac_adc', 'Links'], True)
         dirs, keys = yield reg.dir()
         p = reg.packet()
         print " created packet"
@@ -155,7 +162,7 @@ class DAC_ADCServer(DeviceServer):
             print ports
             if port not in ports:
                 continue
-            devName = '%s - %s' % (serServer, port)
+            devName = '%s (%s)' % (serServer, port)
             devs += [(devName, (server, port))]
 
        # devs += [(0,(3,4))]
@@ -181,6 +188,8 @@ class DAC_ADCServer(DeviceServer):
         dev=self.selectedDevice(c)
         yield dev.write("SET,%i,%f\r"%(port,voltage))
         ans = yield dev.read()
+        voltage=ans.lower().partition(' to ')[2][:-1]
+        self.sigOutputSet([str(port),voltage])
         returnValue(ans)
 
 
@@ -195,6 +204,7 @@ class DAC_ADCServer(DeviceServer):
             return
         yield dev.write("GET_ADC,%i\r"%port)
         ans = yield dev.read()
+        self.sigInputRead([str(port),str(ans)])
         returnValue(float(ans))
 
     @setting(105,port='i',ivoltage='v',fvoltage='v',steps='i',delay='i',returns='s')
@@ -205,6 +215,7 @@ class DAC_ADCServer(DeviceServer):
         """
         dev=self.selectedDevice(c)
         yield dev.write("RAMP1,%i,%f,%f,%i,%i\r"%(port,ivoltage,fvoltage,steps,delay))
+        self.sigRamp1Started([str(port),str(ivoltage),str(fvoltage),str(steps),str(delay)])
         ans = yield dev.read()
         returnValue(ans)
 
@@ -216,6 +227,7 @@ class DAC_ADCServer(DeviceServer):
         """
         dev=self.selectedDevice(c)
         yield dev.write("RAMP2,%i,%i,%f,%f,%f,%f,%i,%i\r"%(port1,port2,ivoltage1,ivoltage2,fvoltage1,fvoltage2,steps,delay))
+        self.sigRamp2Started([str(port1),str(port2),str(ivoltage1),str(ivoltage2),str(fvoltage1),str(fvoltage2),str(steps),str(delay)])
         ans = yield dev.read()
         returnValue(ans)
 
@@ -227,10 +239,11 @@ class DAC_ADCServer(DeviceServer):
         """
         dev=self.selectedDevice(c)
         yield dev.write("BUFFER_RAMP,%s,%s,%s,%s,%i,%i,%i\r"%(dacPorts,adcPorts,ivoltages,fvoltages,steps,delay,nReadings))
+        self.sigBufferRampStarted([dacPorts,adcPorts,ivoltages,fvoltages,str(steps),str(delay),str(nReadings)])
         returnValue(True)
         
 
-    @setting(1919, steps ='i')#, returns = '(*v[], *v[])' )
+    @setting(1919, steps ='i', returns = '(*v[], *v[])' )
     def serial_poll(self, c, steps):
         dev=self.selectedDevice(c)
         ch1=[]
@@ -261,12 +274,9 @@ class DAC_ADCServer(DeviceServer):
         ch1_array = np.asarray((map(float,ch1)))
         ch2_array = np.asarray((map(float,ch2)))
 
-        ans=np.hstack((ch1_array,ch2_array))
-
         yield dev.read()
 
         returnValue((ch1_array,ch2_array))
-        returnValue((ch1, ch2))
 
 
     # @setting(108,channel='i',returns='*v[]')
@@ -290,9 +300,14 @@ class DAC_ADCServer(DeviceServer):
         CONVERT_TIME sets the conversion time for the ADC. The conversion time is the time the ADC takes to convert the analog signal to a digital signal. 
         Keep in mind that the smaller the conversion time, the more noise your measurements will have. Maximum conversion time: 2686 microseconds. Minimum conversion time: 82 microseconds.
         """
+        if not (channel in self.channels):
+            returnValue("Error: invalid channel. Must be in 0,1,2,3")
+        if not (82 <= time <= 2686):
+            returnValue("Error: invalid conversion time. Must adhere to (82 <= t <= 2686) (t is in microseconds)")
         dev=self.selectedDevice(c)
         yield dev.write("CONVERT_TIME,%i,%f\r"%(channel,time))
         ans = yield dev.read()
+        self.sigConvTimeSet([str(channel),str(ans)])
         returnValue(float(ans))
 
 
@@ -339,6 +354,19 @@ class DAC_ADCServer(DeviceServer):
     def timeout(self,c,time):
         dev=self.selectedDevice(c)
         yield dev.timeout(time)
+
+    @setting(9100)
+    def send_read_requests(self,c):
+        dev = self.selectedDevice(c)
+        for port in [0,1,2,3]:
+            yield dev.write("GET_ADC,%i\r"%port)
+            ans = yield dev.read()
+            self.sigInputRead([str(port),str(ans)])
+
+    # GET_DAC hasn't been added to the DAC ADC code yet
+    # @setting(9101)
+    # def send_get_dac_requests(self,c):
+    #     yield
 
 
 __server__ = DAC_ADCServer()

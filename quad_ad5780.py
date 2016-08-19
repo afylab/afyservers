@@ -41,8 +41,8 @@ class serverInfo(object):
         self.deviceName = "Arduino QUAD DC Box"
         self.serverName = "dcbox_quad_ad5780"
 
-    def getDeviceName(self,serServer,comPort):
-        return "%s - %s"%(serServer,comPort)
+    def getDeviceName(self,comPort):
+        return "%s (%s)"%(self.serverName,comPort)
 
 class QuadAD5780DcboxWrapper(DeviceWrapper):
 
@@ -75,9 +75,16 @@ class QuadAD5780DcboxWrapper(DeviceWrapper):
     def do_init(self):
         yield self.packet().write("INITIALIZE\r").send()
         p=self.packet()
-        p.read_line()
         ans = yield p.send()
-        returnValue(ans.read_line)
+
+        while True:
+            p=self.packet()
+            p.read_line()
+            resp=yield p.send()
+            if resp.read_line in ["INITIALIZATION COMPLETE",""]:
+                break
+                
+        returnValue(resp.read_line if resp.read_line else "Did not get 'INITIALIZATION COMPLETE' message from init command. The device might not be a QUAD DCBOX.")
 
     @inlineCallbacks
     def identify(self):
@@ -127,6 +134,13 @@ class QuadAD5780DcboxWrapper(DeviceWrapper):
         ans = yield p.send()
         returnValue(ans.read_line)
 
+    @inlineCallbacks
+    def clearOutput(self):
+        p=self.packet()
+        p.read()
+        ans = yield p.send()
+        returnValue(ans.read)
+
 
 class QuadAD5764DcboxServer(DeviceServer):
     info          = serverInfo()
@@ -138,8 +152,8 @@ class QuadAD5764DcboxServer(DeviceServer):
     sPrefix = 702000
     sigChannelVoltageChanged = Signal(sPrefix+0,'signal__channel_voltage_changed','*s')
     sigInitDone              = Signal(sPrefix+1,'signal__init_done','s')
-    #sigRamp1Started          = Signal(sPrefix+2,'signal__ramp_1_started')
-    #sigRamp2Started          = Signal(sPrefix+3,'signal__ramp_2_started')
+    sigRamp1Started          = Signal(sPrefix+2,'signal__ramp_1_started','*s')
+    sigRamp2Started          = Signal(sPrefix+3,'signal__ramp_2_started','*s')
 
     ports = [0,1,2,3]
 
@@ -173,7 +187,7 @@ class QuadAD5764DcboxServer(DeviceServer):
             ports = yield self.client[serialServer].list_serial_ports()
             if port not in ports:
                 continue
-            devs += [(self.info.getDeviceName(serialServer,port),(self.client[serialServer],port))]
+            devs += [(self.info.getDeviceName(port),(self.client[serialServer],port))]
         returnValue(devs)
 
     @setting(100)
@@ -183,11 +197,19 @@ class QuadAD5764DcboxServer(DeviceServer):
 
 
 
-    @setting(102)
+    @setting(102,returns='s')
     def initialize(self,c):
         dev=self.selectedDevice(c)
-        ans = yield dev.do_init()
-        self.sigInitDone(ans)
+        dev.clearOutput()
+        ans_init = yield dev.do_init()
+        self.sigInitDone(ans_init)
+
+        # read new voltages & send signals post-init. Should all be zero.
+        for port in self.ports:
+            ans=yield dev.get_voltage(port)
+            self.sigChannelVoltageChanged([str(port),str(ans)])
+
+        returnValue(ans_init)
 
     @setting(103,port='i',voltage='v',returns='s')
     def set_voltage(self,c,port,voltage):
@@ -197,6 +219,7 @@ class QuadAD5764DcboxServer(DeviceServer):
         if (voltage > 10) or (voltage < -10):
             returnValue("Error: invalid voltage. It must be between -10 and 10.")
         dev=self.selectedDevice(c)
+        dev.clearOutput()
         ans = yield dev.set_voltage(port,voltage)
         self.sigChannelVoltageChanged([str(port),ans.partition(' TO ')[2][:-1]])
         returnValue(ans)
@@ -206,6 +229,7 @@ class QuadAD5764DcboxServer(DeviceServer):
         if not (port in self.ports):
             returnValue("Error: invalid port. It must be 0,1,2, or 3")
         dev = self.selectedDevice(c)
+        dev.clearOutput()
         ans = yield dev.get_voltage(port)
         returnValue(ans)
 
@@ -219,12 +243,14 @@ class QuadAD5764DcboxServer(DeviceServer):
         if (fvoltage>10) or (fvoltage<-10):
             returnValue("Error: invalid fvoltage. It must be between -10 and 10.")
         if steps<1:
-            returnValue("Error: invalud steps value. It must be at least 1.")
+            returnValue("Error: invalid steps value. It must be at least 1.")
         if delay <= 0:
-            returnValue("Error: invalud delay value. It must be greater than zero.")
+            returnValue("Error: invalid delay value. It must be greater than zero.")
 
         dev = self.selectedDevice(c)
+        dev.clearOutput()
         ans = yield dev.ramp1(port,ivoltage,fvoltage,steps,delay)
+        self.sigRamp1Started([str(port),str(ivoltage),str(fvoltage),str(steps),str(delay)])
         returnValue(ans)
 
     @setting(106,port1='i',port2='i',ivoltage1='v',ivoltage2='v',fvoltage1='v',fvoltage2='v',steps='i',delay='i',returns='s')
@@ -242,31 +268,37 @@ class QuadAD5764DcboxServer(DeviceServer):
         if (fvoltage2>10) or (fvoltage2<-10):
             returnValue("Error: invalid fvoltage2. It must be between -10 and 10.")
         if steps<1:
-            returnValue("Error: invalud steps value. It must be at least 1.")
+            returnValue("Error: invalid steps value. It must be at least 1.")
         if delay <= 0:
-            returnValue("Error: invalud delay value. It must be greater than zero.")
+            returnValue("Error: invalid delay value. It must be greater than zero.")
 
         dev = self.selectedDevice(c)
+        dev.clearOutput()
         ans = yield dev.ramp2(port1,port2,ivoltage1,ivoltage2,fvoltage1,fvoltage2,steps,delay)
+        self.sigRamp2Started([str(port1),str(port2),str(ivoltage1),str(ivoltage2),str(fvoltage1),str(fvoltage2),str(steps),str(delay)])
         returnValue(ans)
 
     @setting(107,returns='s')
     def id(self,c):
         dev = self.selectedDevice(c)
+        dev.clearOutput()
         ans = yield dev.identify()
         returnValue(ans)
 
     @setting(108,returns='s')
     def ready(self,c):
         dev = self.selectedDevice(c)
+        dev.clearOutput()
         ans = yield dev.get_is_ready()
         returnValue(ans)
 
     @setting(600)
     def send_voltage_signals(self,c):
         dev = self.selectedDevice(c)
+        dev.clearOutput()
         for port in self.ports:
             ans=yield dev.get_voltage(port)
+            #print(ans)
             self.sigChannelVoltageChanged([str(port),str(ans)])
         
     @setting(9001,v='v')
