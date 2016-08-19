@@ -77,14 +77,14 @@ class QuadAD5780DcboxWrapper(DeviceWrapper):
         p=self.packet()
         ans = yield p.send()
 
-        done = False # wait for "INITIALIZATION COMPLETE"
-        while not done:
+        while True:
             p=self.packet()
             p.read_line()
             resp=yield p.send()
+            print("got: ({resp})".format(resp=resp.read_line))
             #print("resp %s"%resp.read_line)
-            if resp.read_line == "INITIALIZATION COMPLETE":
-                done = True
+            if resp.read_line in ["INITIALIZATION COMPLETE",""]:
+                break
 
         returnValue(resp.read_line)
 
@@ -199,17 +199,19 @@ class QuadAD5764DcboxServer(DeviceServer):
 
 
 
-    @setting(102)
+    @setting(102,returns='s')
     def initialize(self,c):
         dev=self.selectedDevice(c)
         dev.clearOutput()
-        ans = yield dev.do_init()
-        self.sigInitDone(ans)
+        ans_init = yield dev.do_init()
+        self.sigInitDone(ans_init)
 
         # read new voltages & send signals post-init. Should all be zero.
         for port in self.ports:
             ans=yield dev.get_voltage(port)
             self.sigChannelVoltageChanged([str(port),str(ans)])
+
+        returnValue(ans_init)
 
     @setting(103,port='i',voltage='v',returns='s')
     def set_voltage(self,c,port,voltage):
