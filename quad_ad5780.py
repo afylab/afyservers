@@ -81,12 +81,10 @@ class QuadAD5780DcboxWrapper(DeviceWrapper):
             p=self.packet()
             p.read_line()
             resp=yield p.send()
-            print("got: ({resp})".format(resp=resp.read_line))
-            #print("resp %s"%resp.read_line)
             if resp.read_line in ["INITIALIZATION COMPLETE",""]:
                 break
-
-        returnValue(resp.read_line)
+                
+        returnValue(resp.read_line if resp.read_line else "Did not get 'INITIALIZATION COMPLETE' message from init command. The device might not be a QUAD DCBOX.")
 
     @inlineCallbacks
     def identify(self):
