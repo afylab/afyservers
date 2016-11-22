@@ -231,67 +231,66 @@ class DAC_ADCServer(DeviceServer):
         ans = yield dev.read()
         returnValue(ans)
 
-    @setting(107,dacPorts='s', adcPorts='s', ivoltages='s', fvoltages='s', steps='i',delay='v[]',nReadings='i',returns='b')#(*v[],*v[])')
+    @setting(107,dacPorts='*i', adcPorts='*i', ivoltages='*v[]', fvoltages='*v[]', steps='i',delay='v[]',nReadings='i',returns='b')#(*v[],*v[])')
     def buffer_ramp(self,c,dacPorts,adcPorts,ivoltages,fvoltages,steps,delay,nReadings=1):
         """
         BUFFER_RAMP ramps the specified output channels from the initial voltages to the final voltages and reads the specified input channels in a synchronized manner. 
         It does it within an specified number steps and a delay (microseconds) between the update of the last output channel and the reading of the first input channel.
         """
+        dacN = len(dacPorts)
+        adcN = len(adcPorts)
+        sdacPorts = ""
+        sadcPorts = ""
+        sivoltages = ""
+        sfvoltages = ""
+
+
+        for x in xrange(dacN):
+        	sdacPorts = sdacPorts + str(dacPorts[x])
+        	sivoltages = sivoltages + str(ivoltages[x]) + "," 
+        	sfvoltages = sfvoltages + str(fvoltages[x]) + "," 
+
+        sivoltages = sivoltages[:-1]
+        sfvoltages = sfvoltages[:-1]	
+
+        for x in xrange(adcN):
+        	sadcPorts = sadcPorts + str(adcPorts[x])
+
+
         dev=self.selectedDevice(c)
-        yield dev.write("BUFFER_RAMP,%s,%s,%s,%s,%i,%i,%i\r"%(dacPorts,adcPorts,ivoltages,fvoltages,steps,delay,nReadings))
+        yield dev.write("BUFFER_RAMP,%s,%s,%s,%s,%i,%i,%i\r"%(sdacPorts,sadcPorts,sivoltages,sfvoltages,steps,delay,nReadings))
         self.sigBufferRampStarted([dacPorts,adcPorts,ivoltages,fvoltages,str(steps),str(delay),str(nReadings)])
         returnValue(True)
         
 
-    @setting(1919, steps ='i', returns = '(*v[], *v[])' )
-    def serial_poll(self, c, steps):
+    @setting(1919, nPorts = 'i', steps ='i', returns = '**v[]' )
+    def serial_poll(self, c, nPorts, steps):
+    	'''
+    	SERIAL_POLL return the voltages read by the BUFFER_RAMP. The channels are returned in the same order that they were specified on the BUFFER_RAMP.
+    	'''
         dev=self.selectedDevice(c)
-        ch1=[]
-        ch2=[]
-        i = 0
-        data = yield dev.readByte(steps*4)
+        voltages=[]
+        channels=[]
+        data = yield dev.readByte(steps*nPorts*2)
         data = list(data)
 
-        while i<steps*4:
+        for x in xrange(nPorts):
+            channels.append([])
 
-            b1=int(data[i].encode('hex'),16)
-            b2=int(data[i+1].encode('hex'),16)
-            b3=int(data[i+2].encode('hex'),16)
-            b4=int(data[i+3].encode('hex'),16)
+        for x in xrange(0,len(data),2):
+            b1=int(data[x].encode('hex'),16)
+            b2=int(data[x+1].encode('hex'),16)
+            decimal = twoByteToInt(b1,b2)
+            voltage = map2(decimal,0,65536,-10.0,10.0)
+            voltages.append(voltage)
 
-            decimal1 = twoByteToInt(b1,b2)
-            decimal2 = twoByteToInt(b3,b4)
-
-            voltage1 = map2(decimal1,0,65536,-10.0,10.0)
-            voltage2 = map2(decimal2,0,65536,-10.0,10.0)
-
-            ch1.append(voltage1)
-            ch2.append(voltage2)
-
-            i+=4
-            # print x
-
-        ch1_array = np.asarray((map(float,ch1)))
-        ch2_array = np.asarray((map(float,ch2)))
+        for x in xrange(0,steps*nPorts,nPorts):
+            for y in xrange(nPorts):
+                channels[y].append(voltages[x+y])
 
         yield dev.read()
 
-        returnValue((ch1_array,ch2_array))
-
-
-    # @setting(108,channel='i',returns='*v[]')
-    # def get_buffer(self,c,channel):
-    #     """
-
-    #     """
-    #     dev=self.selectedDevice(c)
-    #     yield dev.write("GET_BUFFER,%i\r"%  channel)
-    #     ans = yield dev.read()
-    #     if ans == None or ans == "":
-    #         returnValue(ans)
-    #     ans_list = ans.split(",")
-    #     ans_array = np.array((map(float,ans_list)))
-    #     returnValue(ans_array)
+        returnValue(channels)
 
 
     @setting(109,channel='i',time='v[]',returns='v[]')
