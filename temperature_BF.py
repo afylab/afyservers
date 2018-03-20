@@ -20,7 +20,7 @@
 """
 ### BEGIN NODE INFO
 [info]
-name = Temperature
+name = temperature_BF
 version = 1.0
 description = Grabbing temperature from a log file on the Z drive
 [startup]
