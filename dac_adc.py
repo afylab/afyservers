@@ -18,7 +18,7 @@
 [info]
 name = DAC-ADC
 version = 1.1.0
-description = DAC-ADC Box server: AD5764-AD7734
+description = DAC-ADC Box server: AD5764-AD7734, AD5780-AD7734, AD5791-AD7734
 [startup]
 cmdline = %PYTHON% %FILE%
 timeout = 20
@@ -98,6 +98,13 @@ class DAC_ADCWrapper(DeviceWrapper):
         p.in_waiting()
         ans = yield p.send()
         returnValue(ans.in_waiting)
+
+    @inlineCallbacks
+    def reset_input_buffer(self):
+        p = self.packet()
+        p.reset_input_buffer()
+        ans = yield p.send()
+        returnValue(ans.reset_input_buffer)
 
     @inlineCallbacks
     def timeout(self, time):
@@ -306,6 +313,78 @@ class DAC_ADCServer(DeviceServer):
 
         returnValue(channels)
 
+    @setting(108,dacPorts='*i', adcPorts='*i', ivoltages='*v[]', fvoltages='*v[]', steps='i',delay='v[]',nReadings='i',adcSteps='i',returns='**v[]')#(*v[],*v[])')
+    def buffer_ramp_dis(self,c,dacPorts,adcPorts,ivoltages,fvoltages,steps,delay,nReadings=1,adcSteps):
+        """
+        BUFFER_RAMP ramps the specified output channels from the initial voltages to the final voltages and reads the specified input channels in a synchronized manner. 
+        It does it within an specified number steps and a delay (microseconds) between the update of the last output channel and the reading of the first input channel.
+        """
+        
+        if not(steps%adcSteps):
+            raise ValueError('Only factors of total steps allow for adcsteps.')
+
+        dacN = len(dacPorts)
+        adcN = len(adcPorts)
+        sdacPorts = ""
+        sadcPorts = ""
+        sivoltages = ""
+        sfvoltages = ""
+
+
+        for x in xrange(dacN):
+            sdacPorts = sdacPorts + str(dacPorts[x])
+            sivoltages = sivoltages + str(ivoltages[x]) + ","
+            sfvoltages = sfvoltages + str(fvoltages[x]) + ","
+
+        sivoltages = sivoltages[:-1]
+        sfvoltages = sfvoltages[:-1]    
+
+        for x in xrange(adcN):
+            sadcPorts = sadcPorts + str(adcPorts[x])
+
+        dev = self.selectedDevice(c)
+        yield dev.write("BUFFER_RAMP_DIS,%s,%s,%s,%s,%i,%i,%i,%i\r" % (sdacPorts, sadcPorts, sivoltages, sfvoltages, steps, delay, nReadings, adcSteps))
+        #self.sigBufferRampStarted([dacPorts, adcPorts, ivoltages, fvoltages, str(steps), str(delay), str(nReadings)])
+
+        voltages = []
+        channels = []
+        data = ''
+        try:
+            nbytes = 0
+            totalbytes = adcSteps * adcN * 2
+            while nbytes < totalbytes:
+                bytestoread = yield dev.in_waiting()
+                if bytestoread > 0:
+                    if nbytes + bytestoread > totalbytes:
+                        tmp = yield dev.readByte(totalbytes - nbytes)
+                        data = data + tmp
+                        nbytes = totalbytes
+                    else:
+                        tmp = yield dev.readByte(bytestoread)
+                        data = data + tmp
+                        nbytes = nbytes + bytestoread
+        except KeyboardInterrupt:
+            pass
+        data = list(data)
+
+        for x in xrange(adcN):
+            channels.append([])
+
+        for x in xrange(0, len(data), 2):
+            b1 = int(data[x].encode('hex'), 16)
+            b2 = int(data[x + 1].encode('hex'), 16)
+            decimal = twoByteToInt(b1, b2)
+            voltage = map2(decimal, 0, 65536, -10.0, 10.0)
+            voltages.append(voltage)
+
+        for x in xrange(0, adcSteps * adcN, adcN):
+            for y in xrange(adcN):
+                channels[y].append(voltages[x + y])
+
+        yield dev.read()
+
+        returnValue(channels)
+
     @setting(109,channel='i',time='v[]',returns='v[]')
     def set_conversionTime(self,c,channel,time):
         """
@@ -352,6 +431,17 @@ class DAC_ADCServer(DeviceServer):
         dev = self.selectedDevice(c)
         ans = yield dev.in_waiting()
         returnValue(ans)
+
+    @setting(113)
+    def stop_ramp(self,c):
+        """
+        Stops buffer_ramp and dis_buffer_ramp only.
+        Discards all elements from input buffer.
+        """
+        dev=self.selectedDevice(c)
+        yield dev.write("STOP\r")
+        time.sleep(1)
+        yield dev.reset_input_buffer()
         
     @setting(9002)
     def read(self,c):
