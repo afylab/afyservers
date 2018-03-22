@@ -433,6 +433,14 @@ class SerialServer(LabradServer):
         ans = ser.inWaiting()
         return ans
 
+    @setting(54, 'Reset Input Buffer')
+    def reset_input_buffer(self, c):
+        """
+        Flush input buffer, discarding all it’s contents.
+        """
+        ser = self.getPort(c)
+        ser.reset_input_buffer()
+
 __server__ = SerialServer()
 
 if __name__ == '__main__':
