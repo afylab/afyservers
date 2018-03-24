@@ -503,6 +503,16 @@ class DAC_ADCServer(DeviceServer):
         ans = yield dev.read()
         returnValue(ans)
 
+    @setting(119,unit='i',returns='s')
+    def delay_unit(self,c,unit):
+        """
+        Sets delay unit. 0 = microseconds(default) 1 = miliseconds
+        """
+        dev=self.selectedDevice(c)
+        yield dev.write("SET_DUNIT,%i\r"%(unit))
+        ans = yield dev.read()
+        returnValue(ans)
+
     @setting(9002)
     def read(self,c):
         dev=self.selectedDevice(c)
