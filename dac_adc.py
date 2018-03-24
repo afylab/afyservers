@@ -320,7 +320,7 @@ class DAC_ADCServer(DeviceServer):
         It does it within an specified number steps and a delay (microseconds) between the update of the last output channel and the reading of the first input channel.
         """
         
-        if not(steps%adcSteps):
+        if steps%adcSteps:
             raise ValueError('Only factors of total steps allow for adcsteps.')
 
         dacN = len(dacPorts)
@@ -351,7 +351,7 @@ class DAC_ADCServer(DeviceServer):
         data = ''
         try:
             nbytes = 0
-            totalbytes = adcSteps * adcN * 2
+            totalbytes = (steps/adcSteps+1) * adcN * 2
             while nbytes < totalbytes:
                 bytestoread = yield dev.in_waiting()
                 if bytestoread > 0:
@@ -363,23 +363,24 @@ class DAC_ADCServer(DeviceServer):
                         tmp = yield dev.readByte(bytestoread)
                         data = data + tmp
                         nbytes = nbytes + bytestoread
+            data = list(data)
+
+            for x in xrange(adcN):
+                channels.append([])
+
+            for x in xrange(0, len(data), 2):
+                b1 = int(data[x].encode('hex'), 16)
+                b2 = int(data[x + 1].encode('hex'), 16)
+                decimal = twoByteToInt(b1, b2)
+                voltage = map2(decimal, 0, 65536, -10.0, 10.0)
+                voltages.append(voltage)
+
+            for x in xrange(0, totalbytes/2, adcN):
+                for y in xrange(adcN):
+                    channels[y].append(voltages[x + y])
+
         except KeyboardInterrupt:
-            pass
-        data = list(data)
-
-        for x in xrange(adcN):
-            channels.append([])
-
-        for x in xrange(0, len(data), 2):
-            b1 = int(data[x].encode('hex'), 16)
-            b2 = int(data[x + 1].encode('hex'), 16)
-            decimal = twoByteToInt(b1, b2)
-            voltage = map2(decimal, 0, 65536, -10.0, 10.0)
-            voltages.append(voltage)
-
-        for x in xrange(0, adcSteps * adcN, adcN):
-            for y in xrange(adcN):
-                channels[y].append(voltages[x + y])
+            print('Stopped')
 
         yield dev.read()
 
@@ -441,7 +442,8 @@ class DAC_ADCServer(DeviceServer):
         dev=self.selectedDevice(c)
         yield dev.write("STOP\r")
         time.sleep(1)
-        yield dev.reset_input_buffer()
+        bytestoread = yield dev.in_waiting()
+        yield dev.readByte(bytestoread)
 
     @setting(114,returns='s')
     def dac_ch_calibration(self,c):
@@ -488,6 +490,16 @@ class DAC_ADCServer(DeviceServer):
         """
         dev=self.selectedDevice(c)
         yield dev.write("ADC_CH_FULL_SC_CAL\r")
+        ans = yield dev.read()
+        returnValue(ans)
+
+    @setting(118,returns='s')
+    def initialize(self,c):
+        """
+        Initializes DACs
+        """
+        dev=self.selectedDevice(c)
+        yield dev.write("INITIALIZE\r")
         ans = yield dev.read()
         returnValue(ans)
 
