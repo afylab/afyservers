@@ -442,7 +442,55 @@ class DAC_ADCServer(DeviceServer):
         yield dev.write("STOP\r")
         time.sleep(1)
         yield dev.reset_input_buffer()
+
+    @setting(114,returns='s')
+    def dac_ch_calibration(self,c):
+        """
+        Calibrates each DAC channel.
+
+        Connect each DAC to each ADC channel.
+        """
+        dev=self.selectedDevice(c)
+        yield dev.write("DAC_CH_CAL\r")
+        ans = yield dev.read()
+        returnValue(ans)
         
+    @setting(115,returns='s')
+    def adc_zero_sc_calibration(self,c):
+        """
+        Calibrates each DAC channel.
+
+        Connect each DAC to each ADC channel.
+        """
+        dev=self.selectedDevice(c)
+        yield dev.write("ADC_ZERO_SC_CAL\r")
+        ans = yield dev.read()
+        returnValue(ans)
+
+    @setting(116,returns='s')
+    def adc_ch_zero_sc_calibration(self,c):
+        """
+        Calibrates ADC Zero scale for each channel.
+
+        Connect a zero scale voltage to each channel.
+        """
+        dev=self.selectedDevice(c)
+        yield dev.write("ADC_CH_ZERO_SC_CAL\r")
+        ans = yield dev.read()
+        returnValue(ans)
+
+    @setting(117,returns='s')
+    def adc_ch_full_sc_calibration(self,c):
+        """
+        Calibrates ADC Full scale for each channel.
+
+        Connect a full scale voltage to each channel.
+        """
+        dev=self.selectedDevice(c)
+        yield dev.write("ADC_CH_FULL_SC_CAL\r")
+        ans = yield dev.read()
+        returnValue(ans)
+
     @setting(9002)
     def read(self,c):
         dev=self.selectedDevice(c)
