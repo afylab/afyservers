@@ -513,6 +513,16 @@ class DAC_ADCServer(DeviceServer):
         ans = yield dev.read()
         returnValue(ans)
 
+    @setting(120,voltage='v',returns='s')
+    def dac_full_scale(self,c,voltage):
+        """
+        Sets the dac full scale.
+        """
+        dev=self.selectedDevice(c)
+        yield dev.write("FULL_SCALE,%f\r"%(voltage))
+        ans = yield dev.read()
+        returnValue(ans)
+
     @setting(9002)
     def read(self,c):
         dev=self.selectedDevice(c)
