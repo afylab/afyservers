@@ -17,7 +17,7 @@
 ### BEGIN NODE INFO
 [info]
 name = DAC-ADC
-version = 1.1.0
+version = 1.2.0
 description = DAC-ADC Box server: AD5764-AD7734, AD5780-AD7734, AD5791-AD7734
 [startup]
 cmdline = %PYTHON% %FILE%
