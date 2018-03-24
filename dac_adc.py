@@ -405,7 +405,7 @@ class DAC_ADCServer(DeviceServer):
     @setting(110,returns='s')
     def id(self,c):
         """
-        IDN? returns the string "DAC-ADC_AD5764-AD7734".
+        IDN? returns the string.
         """
         dev=self.selectedDevice(c)
         yield dev.write("*IDN?\r")
