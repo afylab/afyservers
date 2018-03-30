@@ -199,6 +199,9 @@ class QuadAD5764DcboxServer(DeviceServer):
 
     @setting(102,returns='s')
     def initialize(self,c):
+        """
+        Initializes DACs
+        """
         dev=self.selectedDevice(c)
         dev.clearOutput()
         ans_init = yield dev.do_init()
@@ -213,7 +216,9 @@ class QuadAD5764DcboxServer(DeviceServer):
 
     @setting(103,port='i',voltage='v',returns='s')
     def set_voltage(self,c,port,voltage):
-        #print(dir(c))
+        """
+        SET sets a voltage to a channel and returns the channel and the voltage it set.
+        """
         if not (port in self.ports):
             returnValue("Error: invalid port. It must be 0,1,2, or 3")
         if (voltage > 10) or (voltage < -10):
@@ -226,6 +231,9 @@ class QuadAD5764DcboxServer(DeviceServer):
 
     @setting(104,port='i',returns='s')
     def get_voltage(self,c,port):
+        """
+        GET_DAC returns the voltage output by a DAC channel.
+        """
         if not (port in self.ports):
             returnValue("Error: invalid port. It must be 0,1,2, or 3")
         dev = self.selectedDevice(c)
@@ -235,7 +243,10 @@ class QuadAD5764DcboxServer(DeviceServer):
 
     @setting(105,port='i',ivoltage='v',fvoltage='v',steps='i',delay='i',returns='s')
     def ramp1(self,c,port,ivoltage,fvoltage,steps,delay):
-
+        """
+        RAMP1 ramps one channel from an initial voltage to a final voltage within an specified number steps and a delay (microseconds) between steps. 
+        When the execution finishes, it returns "RAMP_FINISHED".
+        """
         if not (port in self.ports):
             returnValue("Error: invalid port. It must be 0,1,2, or 3")
         if (ivoltage>10) or (ivoltage<-10):
@@ -255,6 +266,10 @@ class QuadAD5764DcboxServer(DeviceServer):
 
     @setting(106,port1='i',port2='i',ivoltage1='v',ivoltage2='v',fvoltage1='v',fvoltage2='v',steps='i',delay='i',returns='s')
     def ramp2(self,c,port1,port2,ivoltage1,ivoltage2,fvoltage1,fvoltage2,steps,delay):
+        """
+        RAMP2 ramps one channel from an initial voltage to a final voltage within an specified number steps and a delay (microseconds) between steps. The # of steps is the total number of steps, not the number of steps per channel. 
+        When the execution finishes, it returns "RAMP_FINISHED".
+        """
         if not (port1 in self.ports):
             returnValue("Error: invalid port1. It must be 0,1,2, or 3")
         if (ivoltage1>10) or (ivoltage1<-10):
@@ -280,6 +295,9 @@ class QuadAD5764DcboxServer(DeviceServer):
 
     @setting(107,returns='s')
     def id(self,c):
+        """
+        IDN? returns the string the device identification.
+        """
         dev = self.selectedDevice(c)
         dev.clearOutput()
         ans = yield dev.identify()
@@ -287,6 +305,9 @@ class QuadAD5764DcboxServer(DeviceServer):
 
     @setting(108,returns='s')
     def ready(self,c):
+        """
+        RDY? returns the string "READY" when the DAC-ADC is ready for a new operation.
+        """
         dev = self.selectedDevice(c)
         dev.clearOutput()
         ans = yield dev.get_is_ready()

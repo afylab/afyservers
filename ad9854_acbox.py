@@ -236,6 +236,9 @@ class arduinoACBoxServer(DeviceServer):
 
     @setting(200,clock_multiplier='i',returns='s')
     def initialize(self,c,clock_multiplier):
+        """
+        Initializes acbox. Clock multiplier must be larger than 4 and lower than 20.
+        """
         if (clock_multiplier < 4) or (clock_multiplier > 20):
             returnValue("Error: clock multiplier must be between 4 and 20")
         dev=self.selectedDevice(c)
@@ -246,6 +249,9 @@ class arduinoACBoxServer(DeviceServer):
 
     @setting(201,returns='s')
     def reset(self,c):
+        """
+        This initializes the communications bus and loads the default values listed in the Table 8 in datasheet AD9854. 
+        """
         dev = self.selectedDevice(c)
         ans = yield dev.do_reset()
         yield self.sigResetDone(ans)
@@ -253,12 +259,18 @@ class arduinoACBoxServer(DeviceServer):
 
     @setting(202,returns='s')
     def identify(self,c):
+        """
+        IDN? returns the string the device identification.
+        """
         dev = self.selectedDevice(c)
         ans = yield dev.identify()
         returnValue(ans)
 
     @setting(203,returns='b')
     def get_is_ready(self,c):
+        """
+        RDY? returns the string "READY" when the DAC-ADC is ready for a new operation.
+        """
         dev = self.selectedDevice(c)
         ans = yield dev.get_is_ready()
         if ans == 'READY':returnValue(True)
@@ -266,12 +278,20 @@ class arduinoACBoxServer(DeviceServer):
 
     @setting(204,returns='s')
     def update_boards(self,c):
+        """
+        Updates acbox values.
+        """
         dev = self.selectedDevice(c)
         ans = yield dev.update_boards()
         returnValue(ans)
 
     @setting(300,channel='s',voltage='v',returns='s')
     def set_voltage(self,c,channel,voltage):
+        """
+        Sets channel voltage.
+        Channel must be one of X1,Y1,X2,Y2.
+        From 0 to 1, where 0 is zero scale and 1 is full scale.
+        """
         if not (channel in self.channels):
             returnValue("Error: invalid channel. It must be one of X1,Y1,X2,Y2")
         if (voltage > 1.0) or (voltage < 0.0):
@@ -298,6 +318,9 @@ class arduinoACBoxServer(DeviceServer):
 
     @setting(302,offset='v',returns='s')
     def set_phase(self,c,offset):
+        """
+        Sets phase difference between boards.
+        """
         offset %= 360.0
         dev  = self.selectedDevice(c)
         resp = yield dev.set_phase(offset)
@@ -307,6 +330,7 @@ class arduinoACBoxServer(DeviceServer):
 
     @setting(303,frequency='v',returns='s')
     def set_frequency(self,c,frequency):
+        """Frequency cannot exceed 20MHz * clock_multiplier"""
         if frequency <= 0:
             returnValue("Error: frequency cannot be zero (or less.)")
         if frequency > (self.clock_multiplier * 20000000):
@@ -319,6 +343,9 @@ class arduinoACBoxServer(DeviceServer):
 
     @setting(400,channel='s',returns='v')
     def get_voltage(self,c,channel):
+        """
+        Channel must be one of X1,Y1,X2,Y2.
+        """
         if not (channel in self.channels):
             returnValue("Error: invalid channel. It must be one of X1,Y1,X2,Y2")
         dev = self.selectedDevice(c)
