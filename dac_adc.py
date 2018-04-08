@@ -320,9 +320,6 @@ class DAC_ADCServer(DeviceServer):
         It does it within an specified number steps and a delay (microseconds) between the update of the last output channel and the reading of the first input channel.
         """
         
-        if steps%adcSteps:
-            raise ValueError('Only factors of total steps allow for adcsteps.')
-
         dacN = len(dacPorts)
         adcN = len(adcPorts)
         sdacPorts = ""
