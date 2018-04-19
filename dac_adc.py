@@ -57,6 +57,7 @@ class DAC_ADCWrapper(DeviceWrapper):
         self.server = server
         self.ctx = server.context()
         self.port = port
+        self.ramping = False
         p = self.packet()
         p.open(port)
         p.baudrate(BAUD)
@@ -72,6 +73,12 @@ class DAC_ADCWrapper(DeviceWrapper):
     def shutdown(self):
         """Disconnect from the serial port when we shut down."""
         return self.packet().close().send()
+
+    def ramping(self, state):
+        self.ramping = state
+
+    def isramping(self):
+        return self.ramping
 
     @inlineCallbacks
     def write(self, code):
@@ -277,10 +284,12 @@ class DAC_ADCServer(DeviceServer):
         voltages = []
         channels = []
         data = ''
+
+        dev.ramping(True)
         try:
             nbytes = 0
             totalbytes = steps * adcN * 2
-            while nbytes < totalbytes:
+            while dev.isramping() and (nbytes < totalbytes):
                 bytestoread = yield dev.in_waiting()
                 if bytestoread > 0:
                     if nbytes + bytestoread > totalbytes:
@@ -291,23 +300,27 @@ class DAC_ADCServer(DeviceServer):
                         tmp = yield dev.readByte(bytestoread)
                         data = data + tmp
                         nbytes = nbytes + bytestoread
+
+            dev.ramping(False)
+
+            data = list(data)
+
+            for x in xrange(adcN):
+                channels.append([])
+
+            for x in xrange(0, len(data), 2):
+                b1 = int(data[x].encode('hex'), 16)
+                b2 = int(data[x + 1].encode('hex'), 16)
+                decimal = twoByteToInt(b1, b2)
+                voltage = map2(decimal, 0, 65536, -10.0, 10.0)
+                voltages.append(voltage)
+
+            for x in xrange(0, steps * adcN, adcN):
+                for y in xrange(adcN):
+                    channels[y].append(voltages[x + y])
+
         except KeyboardInterrupt:
-            pass
-        data = list(data)
-
-        for x in xrange(adcN):
-            channels.append([])
-
-        for x in xrange(0, len(data), 2):
-            b1 = int(data[x].encode('hex'), 16)
-            b2 = int(data[x + 1].encode('hex'), 16)
-            decimal = twoByteToInt(b1, b2)
-            voltage = map2(decimal, 0, 65536, -10.0, 10.0)
-            voltages.append(voltage)
-
-        for x in xrange(0, steps * adcN, adcN):
-            for y in xrange(adcN):
-                channels[y].append(voltages[x + y])
+            print('Stopped')
 
         yield dev.read()
 
@@ -320,6 +333,9 @@ class DAC_ADCServer(DeviceServer):
         It does it within an specified number steps and a delay (microseconds) between the update of the last output channel and the reading of the first input channel.
         """
         
+        if adcSteps>steps:
+            raise ValueError('steps must be larger than adcSteps.')
+
         dacN = len(dacPorts)
         adcN = len(adcPorts)
         sdacPorts = ""
@@ -346,10 +362,11 @@ class DAC_ADCServer(DeviceServer):
         voltages = []
         channels = []
         data = ''
+        dev.ramping(True)
         try:
             nbytes = 0
-            totalbytes = (steps/adcSteps+1) * adcN * 2
-            while nbytes < totalbytes:
+            totalbytes = adcSteps * adcN * 2
+            while dev.isramping() and (nbytes < totalbytes):
                 bytestoread = yield dev.in_waiting()
                 if bytestoread > 0:
                     if nbytes + bytestoread > totalbytes:
@@ -360,6 +377,9 @@ class DAC_ADCServer(DeviceServer):
                         tmp = yield dev.readByte(bytestoread)
                         data = data + tmp
                         nbytes = nbytes + bytestoread
+
+            dev.ramping(False)
+
             data = list(data)
 
             for x in xrange(adcN):
@@ -439,6 +459,7 @@ class DAC_ADCServer(DeviceServer):
         dev=self.selectedDevice(c)
         yield dev.write("STOP\r")
         time.sleep(1)
+        dev.ramping(False)
         bytestoread = yield dev.in_waiting()
         yield dev.readByte(bytestoread)
 
