@@ -32,10 +32,12 @@ timeout = 20
 from labrad.server import setting, Signal
 from labrad.devices import DeviceServer,DeviceWrapper
 from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet import reactor, defer
 import labrad.units as units
 from labrad.types import Value
 import numpy as np
 import time
+from exceptions import IndexError
 
 TIMEOUT = Value(5,'s')
 BAUD    = 115200
@@ -57,6 +59,7 @@ class DAC_ADCWrapper(DeviceWrapper):
         self.server = server
         self.ctx = server.context()
         self.port = port
+        self.ramping = False
         p = self.packet()
         p.open(port)
         p.baudrate(BAUD)
@@ -72,6 +75,12 @@ class DAC_ADCWrapper(DeviceWrapper):
     def shutdown(self):
         """Disconnect from the serial port when we shut down."""
         return self.packet().close().send()
+
+    def setramping(self, state):
+        self.ramping = state
+
+    def isramping(self):
+        return self.ramping
 
     @inlineCallbacks
     def write(self, code):
@@ -160,7 +169,6 @@ class DAC_ADCServer(DeviceServer):
         ans = yield p.send()
         print "ans=",ans
         self.serialLinks = dict((k, ans[k]) for k in keys)
-
 
     @inlineCallbacks
     def findDevices(self):
@@ -265,7 +273,7 @@ class DAC_ADCServer(DeviceServer):
             sfvoltages = sfvoltages + str(fvoltages[x]) + ","
 
         sivoltages = sivoltages[:-1]
-        sfvoltages = sfvoltages[:-1]	
+        sfvoltages = sfvoltages[:-1]
 
         for x in xrange(adcN):
             sadcPorts = sadcPorts + str(adcPorts[x])
@@ -277,10 +285,12 @@ class DAC_ADCServer(DeviceServer):
         voltages = []
         channels = []
         data = ''
+
+        dev.setramping(True)
         try:
             nbytes = 0
             totalbytes = steps * adcN * 2
-            while nbytes < totalbytes:
+            while dev.isramping() and (nbytes < totalbytes):
                 bytestoread = yield dev.in_waiting()
                 if bytestoread > 0:
                     if nbytes + bytestoread > totalbytes:
@@ -291,23 +301,30 @@ class DAC_ADCServer(DeviceServer):
                         tmp = yield dev.readByte(bytestoread)
                         data = data + tmp
                         nbytes = nbytes + bytestoread
+
+            dev.setramping(False)
+
+            data = list(data)
+
+            for x in xrange(adcN):
+                channels.append([])
+
+            for x in xrange(0, len(data), 2):
+                b1 = int(data[x].encode('hex'), 16)
+                b2 = int(data[x + 1].encode('hex'), 16)
+                decimal = twoByteToInt(b1, b2)
+                voltage = map2(decimal, 0, 65536, -10.0, 10.0)
+                voltages.append(voltage)
+
+            for x in xrange(0, steps * adcN, adcN):
+                for y in xrange(adcN):
+                    try:
+                        channels[y].append(voltages[x + y])
+                    except IndexError:
+                        channels[y].append(0)
+
         except KeyboardInterrupt:
-            pass
-        data = list(data)
-
-        for x in xrange(adcN):
-            channels.append([])
-
-        for x in xrange(0, len(data), 2):
-            b1 = int(data[x].encode('hex'), 16)
-            b2 = int(data[x + 1].encode('hex'), 16)
-            decimal = twoByteToInt(b1, b2)
-            voltage = map2(decimal, 0, 65536, -10.0, 10.0)
-            voltages.append(voltage)
-
-        for x in xrange(0, steps * adcN, adcN):
-            for y in xrange(adcN):
-                channels[y].append(voltages[x + y])
+            print('Stopped')
 
         yield dev.read()
 
@@ -320,8 +337,8 @@ class DAC_ADCServer(DeviceServer):
         It does it within an specified number steps and a delay (microseconds) between the update of the last output channel and the reading of the first input channel.
         """
         
-        if steps%adcSteps:
-            raise ValueError('Only factors of total steps allow for adcsteps.')
+        if adcSteps>steps:
+            raise ValueError('steps must be larger than adcSteps.')
 
         dacN = len(dacPorts)
         adcN = len(adcPorts)
@@ -349,10 +366,11 @@ class DAC_ADCServer(DeviceServer):
         voltages = []
         channels = []
         data = ''
+        dev.setramping(True)
         try:
             nbytes = 0
-            totalbytes = (steps/adcSteps+1) * adcN * 2
-            while nbytes < totalbytes:
+            totalbytes = adcSteps * adcN * 2
+            while dev.isramping() and (nbytes < totalbytes):
                 bytestoread = yield dev.in_waiting()
                 if bytestoread > 0:
                     if nbytes + bytestoread > totalbytes:
@@ -363,6 +381,9 @@ class DAC_ADCServer(DeviceServer):
                         tmp = yield dev.readByte(bytestoread)
                         data = data + tmp
                         nbytes = nbytes + bytestoread
+
+            dev.setramping(False)
+
             data = list(data)
 
             for x in xrange(adcN):
@@ -377,11 +398,15 @@ class DAC_ADCServer(DeviceServer):
 
             for x in xrange(0, totalbytes/2, adcN):
                 for y in xrange(adcN):
-                    channels[y].append(voltages[x + y])
+                    try:
+                        channels[y].append(voltages[x + y])
+                    except IndexError:
+                        channels[y].append(0)
 
         except KeyboardInterrupt:
             print('Stopped')
 
+        #Reads BUFFER_RAMP_FINISHED
         yield dev.read()
 
         returnValue(channels)
@@ -441,9 +466,15 @@ class DAC_ADCServer(DeviceServer):
         """
         dev=self.selectedDevice(c)
         yield dev.write("STOP\r")
-        time.sleep(1)
+        dev.setramping(False)
+        
+        #Let ramps finish up
+        yield self.sleep(0.25)
+        
+        #Read remaining bytes if somehow some are left over
         bytestoread = yield dev.in_waiting()
-        yield dev.readByte(bytestoread)
+        if bytestoread >0:
+            yield dev.readByte(bytestoread)
 
     @setting(114,returns='s')
     def dac_ch_calibration(self,c):
@@ -554,6 +585,13 @@ class DAC_ADCServer(DeviceServer):
             ans = yield dev.read()
             self.sigInputRead([str(port),str(ans)])
 
+    def sleep(self,secs):
+        """Asynchronous compatible sleep command. Sleeps for given time in seconds, but allows
+        other operations to be done elsewhere while paused."""
+        d = defer.Deferred()
+        reactor.callLater(secs,d.callback,'Sleeping')
+        return d
+            
     # GET_DAC hasn't been added to the DAC ADC code yet
     # @setting(9101)
     # def send_get_dac_requests(self,c):
