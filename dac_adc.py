@@ -32,10 +32,12 @@ timeout = 20
 from labrad.server import setting, Signal
 from labrad.devices import DeviceServer,DeviceWrapper
 from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet import reactor, defer
 import labrad.units as units
 from labrad.types import Value
 import numpy as np
 import time
+from exceptions import IndexError
 
 TIMEOUT = Value(5,'s')
 BAUD    = 115200
@@ -74,7 +76,7 @@ class DAC_ADCWrapper(DeviceWrapper):
         """Disconnect from the serial port when we shut down."""
         return self.packet().close().send()
 
-    def ramping(self, state):
+    def setramping(self, state):
         self.ramping = state
 
     def isramping(self):
@@ -167,7 +169,6 @@ class DAC_ADCServer(DeviceServer):
         ans = yield p.send()
         print "ans=",ans
         self.serialLinks = dict((k, ans[k]) for k in keys)
-
 
     @inlineCallbacks
     def findDevices(self):
@@ -272,7 +273,7 @@ class DAC_ADCServer(DeviceServer):
             sfvoltages = sfvoltages + str(fvoltages[x]) + ","
 
         sivoltages = sivoltages[:-1]
-        sfvoltages = sfvoltages[:-1]	
+        sfvoltages = sfvoltages[:-1]
 
         for x in xrange(adcN):
             sadcPorts = sadcPorts + str(adcPorts[x])
@@ -285,7 +286,7 @@ class DAC_ADCServer(DeviceServer):
         channels = []
         data = ''
 
-        dev.ramping(True)
+        dev.setramping(True)
         try:
             nbytes = 0
             totalbytes = steps * adcN * 2
@@ -301,7 +302,7 @@ class DAC_ADCServer(DeviceServer):
                         data = data + tmp
                         nbytes = nbytes + bytestoread
 
-            dev.ramping(False)
+            dev.setramping(False)
 
             data = list(data)
 
@@ -317,7 +318,10 @@ class DAC_ADCServer(DeviceServer):
 
             for x in xrange(0, steps * adcN, adcN):
                 for y in xrange(adcN):
-                    channels[y].append(voltages[x + y])
+                    try:
+                        channels[y].append(voltages[x + y])
+                    except IndexError:
+                        channels[y].append(0)
 
         except KeyboardInterrupt:
             print('Stopped')
@@ -362,7 +366,7 @@ class DAC_ADCServer(DeviceServer):
         voltages = []
         channels = []
         data = ''
-        dev.ramping(True)
+        dev.setramping(True)
         try:
             nbytes = 0
             totalbytes = adcSteps * adcN * 2
@@ -378,7 +382,7 @@ class DAC_ADCServer(DeviceServer):
                         data = data + tmp
                         nbytes = nbytes + bytestoread
 
-            dev.ramping(False)
+            dev.setramping(False)
 
             data = list(data)
 
@@ -394,11 +398,15 @@ class DAC_ADCServer(DeviceServer):
 
             for x in xrange(0, totalbytes/2, adcN):
                 for y in xrange(adcN):
-                    channels[y].append(voltages[x + y])
+                    try:
+                        channels[y].append(voltages[x + y])
+                    except IndexError:
+                        channels[y].append(0)
 
         except KeyboardInterrupt:
             print('Stopped')
 
+        #Reads BUFFER_RAMP_FINISHED
         yield dev.read()
 
         returnValue(channels)
@@ -458,10 +466,15 @@ class DAC_ADCServer(DeviceServer):
         """
         dev=self.selectedDevice(c)
         yield dev.write("STOP\r")
-        time.sleep(1)
-        dev.ramping(False)
+        dev.setramping(False)
+        
+        #Let ramps finish up
+        yield self.sleep(0.25)
+        
+        #Read remaining bytes if somehow some are left over
         bytestoread = yield dev.in_waiting()
-        yield dev.readByte(bytestoread)
+        if bytestoread >0:
+            yield dev.readByte(bytestoread)
 
     @setting(114,returns='s')
     def dac_ch_calibration(self,c):
@@ -572,6 +585,13 @@ class DAC_ADCServer(DeviceServer):
             ans = yield dev.read()
             self.sigInputRead([str(port),str(ans)])
 
+    def sleep(self,secs):
+        """Asynchronous compatible sleep command. Sleeps for given time in seconds, but allows
+        other operations to be done elsewhere while paused."""
+        d = defer.Deferred()
+        reactor.callLater(secs,d.callback,'Sleeping')
+        return d
+            
     # GET_DAC hasn't been added to the DAC ADC code yet
     # @setting(9101)
     # def send_get_dac_requests(self,c):
