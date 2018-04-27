@@ -400,16 +400,3 @@ __server__ = SR7280Server()
 if __name__ == '__main__':
     from labrad import util
     util.runServer(__server__)
-
-
-
-
-
-
-
-
-
-
-
-
-
