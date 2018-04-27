@@ -16,17 +16,15 @@
 """
 ### BEGIN NODE INFO
 [info]
-name = Arduino DC box server
-version = 1.1
+name = ad5764_dcbox
+version = 1.1.1
 description = Arduino DC box server
-
 [startup]
 cmdline = %PYTHON% %FILE%
 timeout = 20
-
 [shutdown]
 message = 987654321
-timeout = 20
+timeout = 20    
 ### END NODE INFO
 """
 
@@ -38,7 +36,7 @@ from labrad.types import Value
 
 class serverInfo(object):
     def __init__(self):
-        self.deviceName = 'Arduino DC Box'
+        self.deviceName = 'Arduino DC Box' #'Server name in registry means this'
         self.serverName = "ad5764_dcbox"
 
     def getDeviceName(self,comPort):
@@ -104,7 +102,7 @@ class arduinoDCBoxServer(DeviceServer):
     name          = info.serverName
     deviceName    = info.deviceName
     deviceWrapper = arduinoDCBoxWrapper
-
+    
     # Signals (server prefix 701000)
     sPrefix=701000
     sigChannelVoltageChanged  = Signal(sPrefix + 10,'signal__channel_voltage_changed', '*s')
