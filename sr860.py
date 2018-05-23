@@ -19,28 +19,22 @@
 name = sr860
 version = 2.7
 description = 
-
 [startup]
 cmdline = %PYTHON% %FILE%
 timeout = 20
-
 [shutdown]
 message = 987654321
 timeout = 20
 ### END NODE INFO
 """
-import platform
-global serial_server_name
-serial_server_name = platform.node() + '_serial_server'
-
-from labrad.server import setting
-from labrad.gpib import GPIBManagedServer, GPIBDeviceWrapper
-from twisted.internet.defer import inlineCallbacks, returnValue
-import labrad.units as units
-from labrad.types import Value
 
 from labrad import types as T, gpib, units
 from labrad.server import setting
+from labrad.gpib import GPIBManagedServer, GPIBDeviceWrapper
+from twisted.internet.defer import inlineCallbacks, returnValue
+
+import numpy as np
+
 
 TIMEOUT = Value(5,'s')
 BAUD    = 9600
@@ -69,6 +63,27 @@ def getSensitivity(i):
         return 5 * 10**(-i/3)
     else:
         return 2 * 10**(-i/3)
+		
+def convSensitivity(v, mode):
+	''' converts from a float to a sensitivity index '''
+	if mode == 1:
+		v = float(v*10**6)
+	exp = -int(np.log10(v))
+	mant = v/10**exp
+	num = np.array([1, 5, 2])
+	N = np.argmin(np.absolute(num - mant))
+	index =  int(3 * exp + N)
+	if index > 27:
+		return(27)
+	elif index < 0:
+		return(0)
+	else:
+		return(index)
+		
+		
+		
+	
+	
         
 class sr860Wrapper(GPIBDeviceWrapper):
     @inlineCallbacks
@@ -414,6 +429,8 @@ class sr860Wrapper(GPIBDeviceWrapper):
             returnValue(9*tc)
         else:# slope == 3:
             returnValue(10*tc)
+
+
     
 
         
@@ -445,6 +462,16 @@ class sr860Server(GPIBManagedServer):
             print 'failed:', e
             print 'what what...'
             raise
+			
+    @setting(99, 'outputUnit', returns='?')
+    def outputUnit(self, c):
+        ''' returns a labrad unit, V or A, for what the main output type is. (R, X, Y) '''
+        dev = self.selectedDevice(c)
+		mode = yield dev.input_mode()
+        if int(mode) == 0:
+            returnValue(units.V)
+        elif int(mode) == 1:
+            returnValue(units.A)
     
     @setting(101, 'tb_Mode', mode='i', returns='i')
     def tb_mode(self, c, mode = None):
@@ -463,6 +490,7 @@ class sr860Server(GPIBManagedServer):
         dev = self.selectedDevice(c)
         resp = yield  dev.freqext()
         returnValue(float(resp)) 
+		
     @setting(103, 'Phase', ph=[': query phase offset',  'v: set phase offset'], returns='v')
     def phase(self, c, ph = None):
         ''' sets/gets the phase offset to a value in degrees
@@ -498,8 +526,8 @@ class sr860Server(GPIBManagedServer):
             resp = yield dev.frequency(f)
             returnValue(float(resp))
 
-    @setting(106, 'External ref Slope', ers=[': query', 'i: set'], returns='i')
-    def external_ref_slope(self, c, ers = None):
+    @setting(106, 'external_reference_slope', ers=[': query', 'i: set'], returns='i')
+    def external_reference_slope(self, c, ers = None):
         """
         Get/set the external reference slope.
         0 = Sine, 1 = TTL Rising, 2 = TTL Falling
@@ -526,8 +554,8 @@ class sr860Server(GPIBManagedServer):
             resp = yield dev.harmonic(h)
             returnValue(resp)
 
-    @setting(108, 'Sine Out amp', amp=[': query', 'v: set'], returns='v')
-    def sine_out_amp(self, c, amp = None):
+    @setting(108, 'sine_out_amplitude', amp=[': query', 'v: set'], returns='v')
+    def sine_out_amplitude(self, c, amp = None):
         """ 
         Set/get the amplitude of the sine out.
         Accepts values between .004 and 5.0 V.
@@ -599,8 +627,8 @@ class sr860Server(GPIBManagedServer):
             resp = yield dev.trigger_z(z_in)
             returnValue(int(resp))
             
-    @setting(113, 'iv Input Mode', mode = 'i', returns='i')
-    def input_mode(self, c, mode = None):
+    @setting(113, 'iv_input_mode', mode = 'i', returns='i')
+    def iv_input_mode(self, c, mode = None):
         ''' gets/sets the signal input to voltage (0) or current (1)
         '''
         dev = self.selectedDevice(c)
@@ -760,16 +788,33 @@ class sr860Server(GPIBManagedServer):
             resp = yield dev.time_constant(i)
             returnValue(resp)
 
-    @setting(130, 'Sensitivity', i='i', returns='v')
+    @setting(130, 'Sensitivity', i='v', returns='v')
     def sensitivity(self, c, i=None):
-        """ Set/get the sensitivity according to the lookup table in the manual. i=27 --> 1 nV/fA; 26-->5nV/fA, 25-->10nV/fA, 24-->20nV/fA, ..., 0 --> 1V/uA """
+        """ Set/get the sensitivity. To set the sensitivity, input the voltage sensitivity in Volts or the current sensitivity in Amps. 
+		
+		Lookup table in the manual: i=27 --> 1 nV/fA; 26-->5nV/fA, 25-->10nV/fA, 24-->20nV/fA, ..., 0 --> 1V/uA 
+		"""
         dev = self.selectedDevice(c)
+		iv_mode = yield dev.input_mode()
+		if int(iv_mode) == 0:
+			u = units.V
+		elif int(iv_mode) == 1:
+			u = units.A
+		else:
+			u = 'none'
         if i is None:
             resp = yield dev.sensitivity()
-            returnValue(resp)
+			if u != 'none':
+				returnValue(resp * u)
+			else:
+				returnValue(resp)
         else:
-            resp = yield dev.sensitivity(i)
-            returnValue(resp)
+			jj = convSensitivity(i, int(iv_mode))
+            resp = yield dev.sensitivity(jj)
+			if u != 'none':
+				returnValue(resp * u)
+			else:
+				returnValue(resp)
 			
     @setting(131, 'Filter Slope', i='i', returns='i')
     def filter_slope(self, c, i=None):
@@ -816,7 +861,7 @@ class sr860Server(GPIBManagedServer):
     @setting(135, 'sig_lvl', returns='i')
     def sig_lvl(self, c):
         ''' 
-        Sets/gets voltage input shield grounding setting (grounded = 1 ; floating = 0)
+        Queries the signal strength and returns an integer from 0 (low signal strength) to 4 (overload)
         '''
         dev = self.selectedDevice(c)
 		resp = yield dev.sig_lvl()
@@ -825,7 +870,7 @@ class sr860Server(GPIBManagedServer):
     @setting(136, 'curr_gain', gain='i', returns='i')
     def curr_gain(self, c, gain=None):
         ''' 
-        Sets/gets voltage input shield grounding setting (grounded = 1 ; floating = 0)
+        Sets/gets intput current gain (0 = 1MOhm [1uA] ; 1 = 100MOhm [10nA])
         '''
         dev = self.selectedDevice(c)
         if gain is None:
@@ -834,6 +879,32 @@ class sr860Server(GPIBManagedServer):
         else:
             resp = yield dev.curr_gain(gain)
             returnValue(resp)
+			
+    @setting(137, 'sensitivity_up', returns='v')
+    def sensitivity_up(self, c):
+        """ Increases the sensitivity one increment
+		"""
+        dev = self.selectedDevice(c)
+		sens = yield dev.query('SCAL?')
+		if int(sens) < 27 and int(sens) >= 0:
+			yield dev.write(int(sens) + 1)
+		else:
+			pass
+		resp = yield dev.query('SCAL?')
+		returnValue(getSensitivity(resp))
+		
+    @setting(137, 'sensitivity_down', returns='v')
+    def sensitivity_down(self, c):
+        """ Decreases the sensitivity one increment
+		"""
+        dev = self.selectedDevice(c)
+		sens = yield dev.query('SCAL?')
+		if int(sens) <= 27 and int(sens) > 0:
+			yield dev.write(int(sens) - 1)
+		else:
+			pass
+		resp = yield dev.query('SCAL?')
+		returnValue(getSensitivity(resp))
 
         
 
