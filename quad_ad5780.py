@@ -311,16 +311,3 @@ __server__ = QuadAD5764DcboxServer()
 if __name__ == '__main__':
     from labrad import util
     util.runServer(__server__)
-
-
-
-
-
-
-
-
-
-
-
-
-

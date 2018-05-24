@@ -328,4 +328,3 @@ __server__ = GPIBDeviceManager()
 if __name__ == '__main__':
     from labrad import util
     util.runServer(__server__)
-    
