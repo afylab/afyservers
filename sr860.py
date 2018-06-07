@@ -28,6 +28,7 @@ timeout = 20
 ### END NODE INFO
 """
 
+from math import log10
 from labrad import types as T, gpib, units
 from labrad.server import setting
 from labrad.gpib import GPIBManagedServer, GPIBDeviceWrapper
@@ -35,7 +36,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 import numpy as np
 
 def getTC(i):
-    ''' converts from the integer label used by the SR830 to a time '''
+    ''' converts from the integer label used by the SR860 to a time '''
     if i < 0:
         return getTC(0)
     elif i > 21:
@@ -46,7 +47,7 @@ def getTC(i):
         return 3*10**(-6 + i/2)
 
 def getSensitivity(i):
-    ''' converts form the integer label used by the SR830 to a sensitivity '''
+    ''' converts form the integer label used by the SR860 to a sensitivity '''
     if i < 0:
         return getSensitivity(0)
     elif i > 27:
@@ -58,21 +59,28 @@ def getSensitivity(i):
     else:
         return 2 * 10**(-i/3)
 
-def convSensitivity(v, mode):
-	''' converts from a float to a sensitivity index '''
-	if mode == 1:
-		v = float(v*10**6)
-	exp = -int(np.log10(v))
-	mant = v/10**exp
-	num = np.array([1, 5, 2])
-	N = np.argmin(np.absolute(num - mant))
-	index =  int(3 * exp + N)
-	if index > 27:
-		return(27)
-	elif index < 0:
-		return(0)
-	else:
-		return(index)
+def getSensitivityInt(v, mode):
+    ''' converty from real sensitivity to an integer value taken by the sr860'''
+    if mode == 0:
+        sens = int(round(3*log10(v)))+26
+    else:
+        sens = int(round(3*log10(v)))+2
+    return sens
+
+def getTCInt(t):
+    ''' convert from real sensitivity values to an integer value taken by the sr860'''
+    timeconstant = int(2+round(2*log10(t)))+10
+    return timeconstant
+
+
+
+def getSensitivityInt(v, mode):
+    ''' converty from real sensitivity to an integer value taken by the sr860'''
+    if mode == 0:
+        sens = -int(round(3*log10(v)))
+    else:
+        sens = -int(round(3*log10(v*1e6)))
+    return sens
 
 
 class sr860Wrapper(GPIBDeviceWrapper):
@@ -762,16 +770,18 @@ class sr860Server(GPIBManagedServer):
             resp = yield dev.cout_exp(axis, exp)
             returnValue(int(resp))
 
-    @setting(129, 'Time Constant', i='i', returns='v')
-    def time_constant(self, c, i=None):
+    @setting(129, 'Time Constant', tc='v', returns='v')
+    def time_constant(self, c, tc=None):
         """ Set/get the time constant. i=0 --> 1 us; 1-->3us, 2-->10us, 3-->30us, ..., 21 --> 30ks """
         dev = self.selectedDevice(c)
-        if i is None:
-            resp = yield dev.time_constant()
-            returnValue(resp)
+        if tc is None:
+            resp = yield dev.query("OFLT?")
+            returnValue(getTC(int(resp)))
         else:
-            resp = yield dev.time_constant(i)
-            returnValue(resp)
+            tc = getTCInt(tc)
+            yield dev.write('OFLT {}'.format(tc))
+            resp = yield dev.query("OFLT?")
+            returnValue(getTC(int(resp)))
 
     @setting(130, 'Sensitivity', i='v', returns='v')
     def sensitivity(self, c, i=None):
@@ -794,7 +804,7 @@ class sr860Server(GPIBManagedServer):
             else:
                 returnValue(resp)
         else:
-            jj = convSensitivity(i, int(iv_mode))
+            jj = getSensitivityInt(i, int(iv_mode))
             resp = yield dev.sensitivity(jj)
             if u != 'none':
                 returnValue(resp * u)
