@@ -585,18 +585,154 @@ class DAC_ADCServer(DeviceServer):
             ans = yield dev.read()
             self.sigInputRead([str(port),str(ans)])
 
+
+
+
+    @setting(3737, channelOut='i', channelIn='i', x0='v', y0='v', kickval='v', tolerance='v', attempts='i', delaytime='i', minVoltage='v', maxVoltage='v', returns='b')
+    def setfeedback(self, c, channelOut, channelIn, x0, y0, kickval, tolerance, attempts, delaytime, minVoltage, maxVoltage):
+        """
+        Initialize the feedback parameters. The feedback algorithm is based on bisectioning root finding procedure.
+        channelOut - DAC feedback output 
+        channelIN - ADC input with error signal
+        x0, y0 - initial reading of (v, f(v)); Most likely depricated and not needed
+        kickval - the feedback applies voltage + kickval and voltage-kickval to obtain the points for a linear fit
+        tolerance - if the ADC reading is less than tolerance the feedback is successful
+        attempts - maximum number of feedback attempts
+        delaytim - in us
+        """
+        dev = self.selectedDevice(c)        
+        yield dev.write("SETFB,%i,%i,%s,%s,%s,%s,%i,%i,%s,%s\r"%(channelOut, channelIn, x0, y0, kickval, tolerance, attempts, delaytime, minVoltage, maxVoltage))
+        yield dev.read()
+        returnValue(True)
+
+
+
+    @setting(3939, voltage = 'v', returns='*v[]')#(*v[],*v[])')
+    def dofeedback(self, c, voltage):
+        """
+        
+        """
+        dev = self.selectedDevice(c)
+        yield dev.write("DOFB,%s\r"%(voltage))        
+        voltages = []
+        data = ''
+
+        try:
+            nbytes = 0
+            totalbytes = 2
+            while (nbytes < totalbytes):
+                bytestoread = yield dev.in_waiting()
+                if bytestoread > 0:
+                    if nbytes + bytestoread > totalbytes:
+                        tmp = yield dev.readByte(totalbytes - nbytes)
+                        data = data + tmp
+                        nbytes = totalbytes
+                    else:
+                        tmp = yield dev.readByte(bytestoread)
+                        data = data + tmp
+                        nbytes = nbytes + bytestoread
+
+            data = list(data)
+
+            for x in xrange(0, len(data), 2):
+                b1 = int(data[x].encode('hex'), 16)
+                b2 = int(data[x + 1].encode('hex'), 16)
+                decimal = twoByteToInt(b1, b2)
+                voltage = map2(decimal, 0, 65536, -10.0, 10.0)
+                voltages.append(voltage)
+
+        except KeyboardInterrupt:
+            print('Stopped')
+
+        # yield dev.read()
+
+        returnValue(voltages)
+
+    @setting(3993,dacPorts='*i', adcPorts='*i', ivoltages='*v[]', fvoltages='*v[]', steps='i',delay='v[]',nReadings='i',returns='**v[]')#(*v[],*v[])')
+    def feedbackRamp(self,c,dacPorts,adcPorts,ivoltages,fvoltages,steps,delay,nReadings=1):
+        """
+        BUFFER_RAMP ramps the specified output channels from the initial voltages to the final voltages and reads the specified input channels in a synchronized manner. 
+        It does it within an specified number steps and a delay (microseconds) between the update of the last output channel and the reading of the first input channel.
+        """
+        dacN = len(dacPorts)
+        adcN = len(adcPorts)
+        sdacPorts = ""
+        sadcPorts = ""
+        sivoltages = ""
+        sfvoltages = ""
+
+
+        for x in xrange(dacN):
+            sdacPorts = sdacPorts + str(dacPorts[x])
+            sivoltages = sivoltages + str(ivoltages[x]) + ","
+            sfvoltages = sfvoltages + str(fvoltages[x]) + ","
+
+        sivoltages = sivoltages[:-1]
+        sfvoltages = sfvoltages[:-1]
+
+        for x in xrange(adcN):
+            sadcPorts = sadcPorts + str(adcPorts[x])
+
+        dev = self.selectedDevice(c)
+        yield dev.write("BUFFER_RAMP,%s,%s,%s,%s,%i,%i,%i\r" % (sdacPorts, sadcPorts, sivoltages, sfvoltages, steps, delay, nReadings))
+        self.sigBufferRampStarted([dacPorts, adcPorts, ivoltages, fvoltages, str(steps), str(delay), str(nReadings)])
+
+        voltages = []
+        channels = []
+        data = ''
+
+        dev.setramping(True)
+        try:
+            nbytes = 0
+            totalbytes = steps * adcN * 2
+            while dev.isramping() and (nbytes < totalbytes):
+                bytestoread = yield dev.in_waiting()
+                if bytestoread > 0:
+                    if nbytes + bytestoread > totalbytes:
+                        tmp = yield dev.readByte(totalbytes - nbytes)
+                        data = data + tmp
+                        nbytes = totalbytes
+                    else:
+                        tmp = yield dev.readByte(bytestoread)
+                        data = data + tmp
+                        nbytes = nbytes + bytestoread
+
+            dev.setramping(False)
+
+            data = list(data)
+
+            for x in xrange(adcN):
+                channels.append([])
+
+            for x in xrange(0, len(data), 2):
+                b1 = int(data[x].encode('hex'), 16)
+                b2 = int(data[x + 1].encode('hex'), 16)
+                decimal = twoByteToInt(b1, b2)
+                voltage = map2(decimal, 0, 65536, -10.0, 10.0)
+                voltages.append(voltage)
+
+            for x in xrange(0, steps * adcN, adcN):
+                for y in xrange(adcN):
+                    try:
+                        channels[y].append(voltages[x + y])
+                    except IndexError:
+                        channels[y].append(0)
+
+        except KeyboardInterrupt:
+            print('Stopped')
+
+        yield dev.read()
+
+        returnValue(channels)
+
+
+
     def sleep(self,secs):
         """Asynchronous compatible sleep command. Sleeps for given time in seconds, but allows
         other operations to be done elsewhere while paused."""
         d = defer.Deferred()
         reactor.callLater(secs,d.callback,'Sleeping')
-        return d
-            
-    # GET_DAC hasn't been added to the DAC ADC code yet
-    # @setting(9101)
-    # def send_get_dac_requests(self,c):
-    #     yield
-
+        return d            
 
 __server__ = DAC_ADCServer()
 

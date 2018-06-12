@@ -16,8 +16,8 @@
 """
 ### BEGIN NODE INFO
 [info]
-name = Arduino AC box server
-version = 1.1
+name = ACBOX_AD9854
+version = 1.1.1
 description = Arduino AC box server
 
 [startup]
@@ -39,7 +39,7 @@ from labrad.types import Value
 class serverInfo(object):
     def __init__(self):
         self.deviceName = 'Arduino AC Box'
-        self.serverName = 'ad9854_acbox'
+        self.serverName = 'acbox'
 
     def getDeviceName(self,comPort):
         return "%s (%s)"%(self.serverName,comPort)
@@ -278,6 +278,7 @@ class arduinoACBoxServer(DeviceServer):
             returnValue("Error: invalid voltage. It must be between 0.0 and 1.0")
         dev  = self.selectedDevice(c)
         resp = yield dev.set_voltage(channel,voltage)
+        upd  = yield dev.update_boards()
         ans  = resp.partition(' to ')[2]
         self.sigChannelVoltageChanged([channel,ans])
         self.sigChannels[channel](ans)
@@ -294,6 +295,7 @@ class arduinoACBoxServer(DeviceServer):
             ans  = resp.partition(' to ')[2]
             self.sigChannelVoltageChanged([channel,ans])
             self.sigChannels[channel](ans)
+        upd = yield dev.update_boards()
         returnValue(anss)
 
     @setting(302,offset='v',returns='s')
@@ -301,6 +303,7 @@ class arduinoACBoxServer(DeviceServer):
         offset %= 360.0
         dev  = self.selectedDevice(c)
         resp = yield dev.set_phase(offset)
+        upd  = yield dev.update_boards()
         ans  = resp.partition(' to ')[2]
         self.sigPhaseChanged(ans)
         returnValue(resp)
@@ -313,6 +316,7 @@ class arduinoACBoxServer(DeviceServer):
             returnValue("Error: frequency cannot exceed 20MHz * clock_multiplier, where clock_multiplier is the multiplier set with the initialize function. (currently %i)"%self.clock_multiplier)            
         dev  = self.selectedDevice(c)
         resp = yield dev.set_frequency(frequency)
+        upd  = yield dev.update_boards()
         ans  = resp.partition(' to ')[2][:-3]
         self.sigFrequencyChanged(ans)
         returnValue(resp)
