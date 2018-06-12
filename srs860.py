@@ -64,7 +64,7 @@ def getSensitivityInt(v, mode):
     if mode == 0:
         sens = int(round(3*log10(v)))+26
     else:
-        sens = int(round(3*log10(v)))+2se
+        sens = int(round(3*log10(v)))+2
     return sens
 
 def getTCInt(t):
@@ -884,8 +884,7 @@ class sr860Server(GPIBManagedServer):
 
     @setting(140, "Auto Sensitivity")
     def auto_sensitivity(self, c):
-        """Automatically adjusts sensitivity until signal is between 35% and 95% of full range"""
-
+        """Automatically adjusts sensitivity until signal is between 35% and 95% of full range."""
         waittime = yield self.wait_time(c)
         r = yield self.r(c)
         sens = yield self.sensitivity(c)
