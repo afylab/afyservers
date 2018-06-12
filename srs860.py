@@ -866,7 +866,7 @@ class sr860Server(GPIBManagedServer):
         returnValue(getSensitivity(resp))
 
     @setting(139, 'Wait Time', returns='i')
-    def wait_time(self):
+    def wait_time(self, c):
         """Returns the recommended wait time given current time constant and low-pass filter slope."""
         dev = self.selectedDevice(c)
         tc = yield dev.query("OFLT?")
