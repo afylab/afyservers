@@ -587,7 +587,7 @@ class sr860Server(GPIBManagedServer):
             resp = yield dev.trigger_z(z_in)
             returnValue(int(resp))
 
-    @setting(113, 'iv_input_mode', mode = 'i', returns='i')
+    @setting(113, 'input_mode', mode = 'i', returns='i')
     def input_mode(self, c, mode = None):
         ''' gets/sets the signal input to voltage (0) or current (1)
         '''
@@ -904,7 +904,6 @@ class sr860Server(GPIBManagedServer):
             yield util.wakeupCall(waittime)
             r = yield self.r(c)
             sens = yield self.sensitivity(c)
-
 
 
 __server__ = sr860Server()
