@@ -587,8 +587,8 @@ class sr860Server(GPIBManagedServer):
             resp = yield dev.trigger_z(z_in)
             returnValue(int(resp))
 
-    @setting(113, 'input_mode', mode = 'i', returns='i')
-    def input_mode(self, c, mode = None):
+    @setting(113, 'inputMode', mode = 'i', returns='i')
+    def inputMode(self, c, mode = None):
         ''' gets/sets the signal input to voltage (0) or current (1)
         '''
         dev = self.selectedDevice(c)
