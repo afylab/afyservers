@@ -364,14 +364,14 @@ class SR830(GPIBManagedServer):
         r = yield self.r(c)
         sens = yield self.sensitivity(c)
         mode = yield self.inputMode(c)
+        previousSens = sens
+
         while r == 0:
-            print "sensitivity is to high, dropping by 5"
             sens = getSensitivity(getSensitivityInt(sens, mode)-5)
             sens = yield self.sensitivity(c, sens)
             r = yield self.r(c)
 
         if r/sens < 0.35:
-            print "its not overloading"
             sens = getSensitivity(getSensitivityInt(r/0.35, mode))
             sens = yield self.sensitivity(c, sens)
             r = yield self.r(c)
@@ -381,6 +381,10 @@ class SR830(GPIBManagedServer):
             yield util.wakeupCall(waittime)
             r = yield self.r(c)
             sens = yield self.sensitivity(c)
+            if (sens == previousSens) and (r/sens<=1):
+                break
+            else:
+                previousSens = sens
 
     @setting(32, 'Auto Gain')
     def auto_gain(self, c):
