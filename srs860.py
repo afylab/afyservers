@@ -845,12 +845,15 @@ class sr860Server(GPIBManagedServer):
         """
         dev = self.selectedDevice(c)
         sens = yield dev.query('SCAL?')
-        if int(sens) < 27 and int(sens) >= 0:
-            yield dev.write(int(sens) + 1)
-        else:
-            pass
-        resp = yield dev.query('SCAL?')
-        returnValue(getSensitivity(resp))
+        sens = getSensitivity(int(sens)+1)
+        sens = yield self.sensitivity(c, sens)
+        returnValue(sens)
+        # if int(sens) < 27 and int(sens) >= 0:
+        #     yield dev.write(int(sens) + 1)
+        # else:
+        #     pass
+        # resp = yield dev.query('SCAL?')
+        # returnValue(getSensitivity(resp))
 
     @setting(138, 'sensitivity_down', returns='v')
     def sensitivity_down(self, c):
@@ -858,12 +861,15 @@ class sr860Server(GPIBManagedServer):
         """
         dev = self.selectedDevice(c)
         sens = yield dev.query('SCAL?')
-        if int(sens) <= 27 and int(sens) > 0:
-            yield dev.write(int(sens) - 1)
-        else:
-            pass
-        resp = yield dev.query('SCAL?')
-        returnValue(getSensitivity(resp))
+        sens = getSensitivity(int(sens)-1)
+        sens = yield self.sensitivity(c, sens)
+        returnValue(sens)
+        # if int(sens) <= 27 and int(sens) > 0:
+        #     yield dev.write(int(sens) - 1)
+        # else:
+        #     pass
+        # resp = yield dev.query('SCAL?')
+        # returnValue(getSensitivity(resp))
 
     @setting(139, 'Wait Time', returns='v')
     def wait_time(self, c):
