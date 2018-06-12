@@ -764,14 +764,14 @@ class sr860Server(GPIBManagedServer):
         if i is None:
             resp = yield dev.sensitivity()
             if u != 'none':
-                returnValue(resp * u)
+                returnValue(resp)
             else:
                 returnValue(resp)
         else:
             jj = getSensitivityInt(i, int(iv_mode))
             resp = yield dev.sensitivity(jj)
             if u != 'none':
-                returnValue(resp * u)
+                returnValue(resp )
             else:
                 returnValue(resp)
 
