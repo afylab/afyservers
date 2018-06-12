@@ -69,7 +69,7 @@ MODE_DICT = {
 
 def getSensitivityInt(v, mode):
     ''' converty from real sensitivity to an integer value taken by the sr830'''
-    if mode == 0:
+    if (mode == 0)or(mode==1):
         sens = int(round(3*log10(v)))+26
     else:
         sens = int(round(3*log10(v)))+2
