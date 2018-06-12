@@ -865,7 +865,7 @@ class sr860Server(GPIBManagedServer):
         resp = yield dev.query('SCAL?')
         returnValue(getSensitivity(resp))
 
-    @setting(139, 'Wait Time', returns='i')
+    @setting(139, 'Wait Time', returns='v')
     def wait_time(self, c):
         """Returns the recommended wait time given current time constant and low-pass filter slope."""
         dev = self.selectedDevice(c)
