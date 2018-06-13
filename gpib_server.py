@@ -102,7 +102,7 @@ class GPIBBusServer(LabradServer):
         """
         try:
             rm = visa.ResourceManager()
-            addresses = [str(x) for x in rm.list_resources()]
+            addresses = [str(x) for x in rm.list_resources('?*')]
             additions = set(addresses) - set(self.devices.keys())
             deletions = set(self.devices.keys()) - set(addresses)
             for addr in additions:
@@ -110,7 +110,7 @@ class GPIBBusServer(LabradServer):
                     if addr.startswith('GPIB'):
                         instName = addr
                     elif addr.startswith('TCPIP'):
-                        instName = addr
+                        instName = addr                     
                     elif addr.startswith('USB'):
                         instName = addr + '::INSTR'
                     else:
@@ -119,7 +119,8 @@ class GPIBBusServer(LabradServer):
                     instr.write_termination = ''
                     instr.clear()
                     if addr.endswith('SOCKET'):
-                        instr.write_termination = '\n'
+                        instr.write_termination = '\r\n'
+                        instr.read_termination= '\r\n'
                     self.devices[addr] = instr
                     self.sendDeviceMessage('GPIB Device Connect', addr)
                 except Exception, e:
@@ -129,6 +130,8 @@ class GPIBBusServer(LabradServer):
                 self.sendDeviceMessage('GPIB Device Disconnect', addr)
         except Exception, e:
             print 'Problem while refreshing devices:', str(e)
+        print 'selfdevices = ', self.devices
+        print 'self.devices.keys():', self.devices.keys()
 
     def sendDeviceMessage(self, msg, addr):
         print msg + ': ' + addr
