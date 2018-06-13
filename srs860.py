@@ -397,31 +397,31 @@ class sr860Wrapper(GPIBDeviceWrapper):
 class sr860Server(GPIBManagedServer):
     name = 'sr860'
     deviceName = 'Stanford_Research_Systems SR860'
-    deviceIdentFunc = 'identify_device'
+    # deviceIdentFunc = 'identify_device'
     deviceWrapper = sr860Wrapper
 
-    @setting(9988, server='s', address='s')
-    def identify_device(self, c, server, address):
-        print 'identifying:', server, address
-        try:
-            s = self.client[server]
-            p = s.packet()
-            p.address(address)
-            p.write_termination('\r')
-            p.read_termination('\r')
-            p.write('*IDN?')
-            p.read()
-            p.write('*IDN?')
-            p.read()
-            ans = yield p.send()
-            resp = ans.read[1]
-            print 'got ident response:', resp
-            if resp == 'Stanford_Research_Systems,SR860,003329,V1.47':
-                returnValue(self.deviceName)
-        except Exception, e:
-            print 'failed:', e
-            print 'what what...'
-            raise
+    # @setting(9988, server='s', address='s')
+    # def identify_device(self, c, server, address):
+    #     print 'identifying:', server, address
+    #     try:
+    #         s = self.client[server]
+    #         p = s.packet()
+    #         p.address(address)
+    #         p.write_termination('\r')
+    #         p.read_termination('\r')
+    #         p.write('*IDN?')
+    #         p.read()
+    #         p.write('*IDN?')
+    #         p.read()
+    #         ans = yield p.send()
+    #         resp = ans.read[1]
+    #         print 'got ident response:', resp
+    #         if resp == 'Stanford_Research_Systems,SR860,003329,V1.47':
+    #             returnValue(self.deviceName)
+    #     except Exception, e:
+    #         print 'failed:', e
+    #         print 'what what...'
+    #         raise
 
     @setting(99, 'outputUnit', returns='?')
     def outputUnit(self, c):
