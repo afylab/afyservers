@@ -36,6 +36,7 @@ from labrad.gpib import GPIBManagedServer, GPIBDeviceWrapper
 from twisted.internet.defer import inlineCallbacks, returnValue
 import labrad.units as units
 from labrad.types import Value
+import numpy as np
 import time
 import matplotlib.pyplot as plot
 
@@ -119,41 +120,15 @@ class RedPitWrapper(GPIBDeviceWrapper):
     def query(self,phrase):  # for debug
         yield self.write(phrase)
         ans = yield self.read()
+        return ans
         print ans 
-
-    # @inlineCallbacks
-    # def aquire():
-
-    @inlineCallbacks
-    def buffersize(self,n):
-        yield self.write('ACQ:SOUR%i:DATA?' %n)
-        buffer_raw = yield self.read() #returns string
-        buffer_raw = buffer_raw.replace('REDPITAYA,INSTR2014,0,01-02','')
-        buffer_raw = buffer_raw.strip('{}\n\r').replace("  ","").split(',')
-        self.size=len(list(map(float,buffer_raw)))
-        print 'Length buffered sample list: ', self.size
-    
-    @inlineCallbacks
-    def plot_buffer(self,n,m):
-        yield self.write('ACQ:START;TRIG NOW')
-        while 1:
-            yield self.write('ACQ:TRIG:STAT?')
-            resp = yield self.read()
-            if resp == 'TD':
-                break
-        yield self.write('ACQ:SOUR%(n)i:DATA:STA:N? 0, %(m)i' %{'n':n,'m':m})
-        buffer_raw = yield self.read() #returns string
-        buffer_raw = buffer_raw.replace('REDPITAYA,INSTR2014,0,01-02','')
-        buffer_raw = buffer_raw.strip('{}\n\r').replace("  ","").split(',')
-        data=list(map(float,buffer_raw))
-        plot.plot(data)
-        plot.ylabel('Voltage on input %i' %n)
-        plot.show()
 
     @inlineCallbacks
     def read_cons(self): #for debug
+        #print 'testing'
         resp = yield self.read()
-        print 'Red Pitaya: ', resp
+        return resp
+        print resp
 
     @inlineCallbacks
     def write_cons(self,msg): #for debug
@@ -162,36 +137,41 @@ class RedPitWrapper(GPIBDeviceWrapper):
     @inlineCallbacks
     def acquire(self,n,Ns):
         data=''
-        samplenumber=0
         delay=16384
-        start_time=time.time()
-        while samplenumber < Ns:
+        if delay<=Ns:
+            while delay<=Ns:
+                yield self.write('ACQ:START;TRIG NOW')
+                yield self.write('ACQ:SOUR%i:DATA:STA:N? 0, 16384' %n)
+                buffer_raw = yield self.read() #returns string
+                data=data+buffer_raw
+                Ns=Ns-delay
+            if Ns!=0:
+                yield self.write('ACQ:START;TRIG NOW')
+                yield self.write('ACQ:SOUR%(out)i:DATA:STA:N? 0, %(Ns)i' %{'out':n, 'Ns':Ns})
+                buffer_raw = yield self.read() #returns string of floats
+                data=data+buffer_raw
+        else:
             yield self.write('ACQ:START;TRIG NOW')
-            yield self.write('ACQ:SOUR%i:DATA:STA:N? 0, 16384' %n)
-            buffer_raw = yield self.read() #returns string
+            yield self.write('ACQ:SOUR%(out)i:DATA:STA:N? 0, %(Ns)i' %{'out':n, 'Ns':Ns})
+            buffer_raw = yield self.read() #returns string of floats
             data=data+buffer_raw
-            samplenumber=samplenumber+delay
-            
-        print 'process time: ', time.time() - start_time
+
+        print 'Data aquired...'            
         data = data.replace('REDPITAYA,INSTR2014,0,01-02','')
         data = data.replace('TD','').replace('}{', ',')
-        print 'RED,TD replaced'
+        print 'Data merged, RED,TD outliers removed...'
         data = data.strip('{}\n\r').replace("  ","").split(',')
-        print 'datalist made'
-        print 'data:', data
         data = list(map(float,data))
+        print 'datalist made'
         print 'datalength', len(data)
-        print data
-
-        plot.plot(data)
-        plot.ylabel('Voltage on input %i' %n)
-        plot.show()
+        return data
 
     @inlineCallbacks
     def acq_dec(self,dec):
         yield self.write('ACQ:DEC %i' %dec)
         yield self.write('ACQ:DEC?')
         ans = yield self.read()
+        return ans
         print 'Decimation factor set to: ', ans
 
 
@@ -230,26 +210,28 @@ class RedPitServer(GPIBManagedServer):
         n=output 1 or 2
         Type= 'sin' Sine, 'tri' Triangle, 'sqr' Square
         freq= 0Hz --> 62.5 MHz
-        Vpp= 0V --> 1V
+        Vpp= 0V --> 1V amplitude
         """
         dev=self.selectedDevice(c)
         Type=Type.lower()
         Vpp=float(abs(Vpp))
         types=['sin','tri','sqr']
-        if not (Vpp <= 1):
+
+        if (0<=Vpp and Vpp<= 1):    
+            try:
+                if Type=='sin':
+                    Type='SINE'
+                if Type=='tri':
+                    Type='TRIANGLE'
+                if Type=='sqr':
+                    Type='SQUARE'
+            except Exception:
+                print 'Error: function type not recognized, try (sin, tri, sqr)'
+                raise
+            yield dev.func_gen(n,Type,freq, Vpp)
+        else:
             print 'Vpp not in range 0<Vpp<=1'
-            raise    
-        try:
-            if Type=='sin':
-                Type='SINE'
-            if Type=='tri':
-                Type='TRIANGLE'
-            if Type=='sqr':
-                Type='SQUARE'
-        except Exception:
-            print 'Error: function type not recognized, try (sin, tri, sqr)'
             raise
-        yield dev.func_gen(n,Type,freq, Vpp)
 
     @setting(102,n='i',Vs='v',Ve='v',nV='i',fs='v',fe='v',nf='i',dt='v')
     def sweep(self,c,n,Vs,Ve,nV,fs,fe,nf,dt):
@@ -328,7 +310,7 @@ class RedPitServer(GPIBManagedServer):
         """Sets Voltage amplitude on sma outputs
         set_volt(n,Vpp)
         n=output#  1 or 2
-        Vpp= 0V --> 1V
+        Vpp= 0V --> 1V amplitude
         """
         dev=self.selectedDevice(c)
         Vpp=float(abs(Vpp))
@@ -343,21 +325,6 @@ class RedPitServer(GPIBManagedServer):
         """Sends SCPI string like *IDN? to connected redpitaya device and displays device response"""
         dev=self.selectedDevice(c)
         yield dev.query(phrase)
-
-    @setting(108,n='i')
-    def buffersize(self,c,n):
-        """Provides the length of the list of buffered samples stored on a specified sma input.
-        buffer(n)
-        n= input#  1 or 2
-        """
-        dev=self.selectedDevice(c)
-        yield dev.buffersize(n)
-    
-    @setting(109,n='i',m='i')
-    def plot_buffer(self,c,n,m):
-        """Returns plot of data up to mth stored sample on the nth buffer."""
-        dev=self.selectedDevice(c)
-        yield dev.plot_buffer(n,m)
 
     @setting(110)
     def read_cons(self,c):
@@ -388,8 +355,13 @@ class RedPitServer(GPIBManagedServer):
     @setting(113,dec='i')
     def acq_dec(self,c,dec):
         """Sets decimation, i.e. integer downsampling factor. Ex: if dec=8, will only record the 8th sample taken at the sampling frequency. Allowed: dec = 1,8,64,1024,8192,65536. """
-        dev=self.selectedDevice(c)
-        yield dev.acq_dec(dec)
+        decimation=[1,8,64,1024,8192,65536]
+        if dec in decimation:
+            dev=self.selectedDevice(c)
+            yield dev.acq_dec(dec)
+        else:
+            print 'Error: Not an allowed decimation factor. Allowed: dec = 1,8,64,1024,8192,65536.'
+
 
 __server__ = RedPitServer()
 
