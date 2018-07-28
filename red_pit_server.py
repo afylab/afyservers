@@ -19,7 +19,7 @@
 ### BEGIN NODE INFO
 [info]
 name = Red Pitaya microprocessor
-version = 0.1
+version = 0.2
 description = 
 [startup]
 cmdline = %PYTHON% %FILE%
@@ -45,46 +45,6 @@ import matplotlib.pyplot as plot
 class RedPitWrapper(GPIBDeviceWrapper):
 
     @inlineCallbacks
-    def sweep(self,n,Vs,Ve,nV,fs,fe,nf,dt):
-        dV=float((Ve-Vs)/nV)
-        df=float((fe-fs)/nf)
-        Vnow=Vs
-        j=1
-        if fs==fe:
-            while Vnow<=Ve:
-                yield self.func_gen(n, 'SIN', fs, Vnow)
-                print j,Vnow,fnow 
-                time.sleep(dt)
-                Vnow=Vnow+dV
-                j=j+1
-                time.sleep(dt)
-            print 'Voltage Sweep Done'
-        elif Vs==Ve:
-            fnow=fs
-            i=0
-            while fnow<=fe:
-                yield self.func_gen(n, 'SIN', fnow, Vs)
-                print j,Vs,fnow
-                i=i+1
-                time.sleep(dt)
-            print 'Frequency Sweep Done'
-        else:
-            while Vnow<=Ve:
-                fnow=fs
-                i=0
-                while fnow<=fe:
-                    yield self.func_gen(n, 'SIN', fnow, Vnow)
-                    fnow=fnow+df
-                    print j,Vnow,fnow
-                    i=i+1
-                    time.sleep(dt)    
-                print 'Sweep at %fV done' %Vnow
-                Vnow=Vnow+dV
-                j=j+1
-                time.sleep(dt)
-            print 'Sweep Done'
-
-    @inlineCallbacks
     def func_gen(self,n,Type,freq,Vpp):
         yield self.write('OUTPUT%(out)i:STATE ON;:SOUR%(out)i:VOLT %(Vpp)f;FUNC %(func)s ;FREQ:FIX %(freq)f' %{'out':n ,'Vpp':Vpp, 'func':Type, 'freq':freq})
 
@@ -104,31 +64,16 @@ class RedPitWrapper(GPIBDeviceWrapper):
     def set_volt(self,n,Vpp):
         yield self.write('OUTPUT%(out)i:STATE ON;:SOUR%(out)i:VOLT %(Vpp)f' %{'out':n ,'Vpp':Vpp})
 
-    
-
-     # @inlineCallbacks
-     # def acquire(self,c,n,rate,dec,Ns):
-     #    yield self.write('ACQ%(in)i:DEC %(dec)i;SRAT %(srat)s;DEC?;SRAT?' %{'in':n,'dec':dec,'srat':rate,'form':form,'units':units})
-     #    ans = yield self.read()
-     #    print '(Decimation,Samplerate): ', ans
-
-        #insert math here that figures out how long to run ACQ start before calling ACQ end at a given sample rate to get enough samples for Ns
-        #when done and data has been pulled from buffer, need to reset buffer to clear the parameters (happens on reboot also). 
-        #Can check buffer size spec sheet to figure out max buffer that you can take.
-
     @inlineCallbacks
     def query(self,phrase):  # for debug
         yield self.write(phrase)
         ans = yield self.read()
-        return ans
-        print ans 
+        returnValue(ans)
 
     @inlineCallbacks
     def read_cons(self): #for debug
-        #print 'testing'
-        resp = yield self.read()
-        return resp
-        print resp
+        cons_resp = yield self.read()
+        returnValue(cons_resp) 
 
     @inlineCallbacks
     def write_cons(self,msg): #for debug
@@ -137,44 +82,36 @@ class RedPitWrapper(GPIBDeviceWrapper):
     @inlineCallbacks
     def acquire(self,n,Ns):
         data=''
-        delay=16384
-        if delay<=Ns:
-            while delay<=Ns:
+        fullbuffer=16384
+        if fullbuffer<=Ns:
+            while fullbuffer<=Ns:
                 yield self.write('ACQ:START;TRIG NOW')
                 yield self.write('ACQ:SOUR%i:DATA:STA:N? 0, 16384' %n)
                 buffer_raw = yield self.read() #returns string
                 data=data+buffer_raw
-                Ns=Ns-delay
+                Ns=Ns-fullbuffer
             if Ns!=0:
                 yield self.write('ACQ:START;TRIG NOW')
                 yield self.write('ACQ:SOUR%(out)i:DATA:STA:N? 0, %(Ns)i' %{'out':n, 'Ns':Ns})
-                buffer_raw = yield self.read() #returns string of floats
+                buffer_raw = yield self.read() #returns string of nested floats
                 data=data+buffer_raw
         else:
             yield self.write('ACQ:START;TRIG NOW')
             yield self.write('ACQ:SOUR%(out)i:DATA:STA:N? 0, %(Ns)i' %{'out':n, 'Ns':Ns})
-            buffer_raw = yield self.read() #returns string of floats
+            buffer_raw = yield self.read() #returns string of nested floats
             data=data+buffer_raw
-
-        print 'Data aquired...'            
-        data = data.replace('REDPITAYA,INSTR2014,0,01-02','')
-        data = data.replace('TD','').replace('}{', ',')
-        print 'Data merged, RED,TD outliers removed...'
-        data = data.strip('{}\n\r').replace("  ","").split(',')
+        data = data.replace('REDPITAYA,INSTR2014,0,01-02','') #maybe unnecessary
+        data = data.replace('TD','').replace('}{', ',') #merge multiple buffers into one dataset
+        data = data.strip('{}\n\r').replace("  ","").split(',') #make string into list of floats
         data = list(map(float,data))
-        print 'datalist made'
-        print 'datalength', len(data)
-        return data
+        returnValue(data)
 
     @inlineCallbacks
     def acq_dec(self,dec):
         yield self.write('ACQ:DEC %i' %dec)
         yield self.write('ACQ:DEC?')
-        ans = yield self.read()
-        return ans
-        print 'Decimation factor set to: ', ans
-
-
+        decimate = yield self.read()
+        returnValue(decimate)
 
 
 class RedPitServer(GPIBManagedServer):
@@ -185,6 +122,9 @@ class RedPitServer(GPIBManagedServer):
 
     @setting(9988, server='s', address='s')
     def identify_device(self, c, server, address):
+        """
+        Identifies red pitaya instruments to GPIB server.
+        """
         print 'identifying:', server, address
         try:
             s = self.client[server]
@@ -198,26 +138,26 @@ class RedPitServer(GPIBManagedServer):
             resp = ans.read
             print 'got ident response:', resp
             if resp == 'REDPITAYA,INSTR2014,0,01-02':
-                returnValue(self.deviceName)
+                returnValue((self.deviceName,address))
         except Exception, e:
             print 'failed:', e
             raise
 
-    @setting(101,n='i',Type='s', freq='v',Vpp='v')
-    def func_gen(self, c ,n, Type, freq, Vpp):
-        """Set board outputs sma 1 & 2 like a function generator.
-        func_gen(n, Type, freq , Vpp)
-        n=output 1 or 2
-        Type= 'sin' Sine, 'tri' Triangle, 'sqr' Square
-        freq= 0Hz --> 62.5 MHz
-        Vpp= 0V --> 1V amplitude
+    @setting(101,n='i',Type='s', freq='v',V='v')
+    def func_gen(self, c ,n, Type, freq, V):
+        """
+        :param n: sma output number
+        :param Type: type of output function, 'sin' Sine, 'tri' Triangle, 'sqr' Square
+        :param freq: output frequency up to 50 MHz.
+        :param V: output voltage amplitude, up to 1V.
+        :return: Sets desired function output on specied sma output
         """
         dev=self.selectedDevice(c)
         Type=Type.lower()
-        Vpp=float(abs(Vpp))
+        V=float(abs(V))
         types=['sin','tri','sqr']
 
-        if (0<=Vpp and Vpp<= 1):    
+        if (0<=V and V<= 1 and 0<=freq and freq<= 50000000):    
             try:
                 if Type=='sin':
                     Type='SINE'
@@ -228,41 +168,10 @@ class RedPitServer(GPIBManagedServer):
             except Exception:
                 print 'Error: function type not recognized, try (sin, tri, sqr)'
                 raise
-            yield dev.func_gen(n,Type,freq, Vpp)
+            yield dev.func_gen(n,Type,freq, V)
         else:
-            print 'Vpp not in range 0<Vpp<=1'
+            print 'Voltage or frequency not in range 0<=V<=1, 0<=freq<=50 MHz'
             raise
-
-    @setting(102,n='i',Vs='v',Ve='v',nV='i',fs='v',fe='v',nf='i',dt='v')
-    def sweep(self,c,n,Vs,Ve,nV,fs,fe,nf,dt):
-        """Sweeps voltage and/or frequency on board sma outputs 1 & 2.
-        sweepv(n,Vs,Ve,nV,fs,fe,nf,dt)
-        n= output 1 or 2
-        Vs=Start amplitude, 0 to 1 V
-        Ve=end amplitude, 0 to 1 V
-        nV=# voltage increments, max res ~ .0.00013 V per nV
-        fs=frequency start 0Hz --> 62.5 MHz
-        fe=frequency end 0Hz --> 62.5 MHz
-        nf=# freq increments
-        dt=time increments, sec
-
-        If fs=fe, then will sweep voltage only.
-        If Vs=Ve, then will sweep frequency only. 
-        """
-        dev=self.selectedDevice(c)
-        if not (0 < nf <1) or (0 < nV <1) or (0 < dt): 
-            print "Error: invalid choice of increments"
-            raise
-        elif not (0 < fs <= freqmax) or (0 < fe <= freqmax):
-            print "Error: invalid frequency endpoints. Must be 0-62.5 MHz"
-            raise
-        elif not (0 < Vs <=1) or (0 < Ve <=1):
-            print "Error: invalid voltage endpoints. Must be 0-1V"
-            raise
-        elif (Vs==Ve) and (fs==fe):
-            print "Error: sweep endpoints are not different."
-        else:
-            yield dev.sweep(n,Vs,Ve,nV,fs,fe,nf,dt)
            
     @setting(103)        
     def reset(self, c):
@@ -272,22 +181,27 @@ class RedPitServer(GPIBManagedServer):
 
     @setting(104, n='i',Phase='v', Voff='v')
     def set_phase(self,c,n,Phase,Voff):
-        """Sets phase and voltage offset on a given sma output.
-        set_phase(n,Phase,Voff)
-        n=output#  1 or 2
-        Phase= 0 to 360 degrees
-        Voff= DC offset 0-->1V
+        """
+        :param n: sma output number
+        :param Phase: sets 0 to 360 degrees phase offset
+        :param Voff: sets DC voltage offset 0<=Voff<=1 (can clip output)
+        :return: sets a phase or DC offest on a given output
         """
         dev=self.selectedDevice(c)
-        Voff=abs(Voff)
-        yield dev.set_phase(n,Phase,Voff)   
+        Voff=float(abs(Voff))
+        if (0<=Voff and Voff<= 1):
+            yield dev.set_phase(n,Phase,Voff) 
+        else:
+            print 'Voltage or frequency not in range 0<=V<=1'
+            raise
+          
 
     @setting(105, n='i',Type='s')
     def set_func(self,c,n,Type):
-        """Sets functional form of output on sma output 1 or 2
-        set_func(n,Type)
-        n=output#  1 or 2
-        Type= 'sin' Sine, 'tri' Triangle, 'sqr' Square
+        """
+        :param n: sma output number
+        :param Type: type of output function, 'sin' Sine, 'tri' Triangle, 'sqr' Square
+        :return: changes function type on a given sma output
         """
         dev=self.selectedDevice(c)
         try:
@@ -305,60 +219,73 @@ class RedPitServer(GPIBManagedServer):
             raise
         yield dev.set_func(n,Type)
 
-    @setting(106,n='i',Vpp='v')
-    def set_volt(self,c,n,Vpp):
-        """Sets Voltage amplitude on sma outputs
-        set_volt(n,Vpp)
-        n=output#  1 or 2
-        Vpp= 0V --> 1V amplitude
+    @setting(106,n='i',V='v')
+    def set_volt(self,c,n,V):
+        """
+        :param n: sma output number
+        :param V: output voltage, up to 1V.
+        :return: changes voltage amplitude on a given sma output.
         """
         dev=self.selectedDevice(c)
-        Vpp=float(abs(Vpp))
-        if Vpp>1:
-            print 'Error: out of voltage range 0V --> 1V'
+        V=float(abs(V))
+        if V>1:
+            print 'Voltage or frequency not in range 0<=V<=1'
             raise
         else:
-            yield dev.set_volt(n,Vpp)
+            yield dev.set_volt(n,V)
 
     @setting(107,phrase='s')
     def query(self,c,phrase):
-        """Sends SCPI string like *IDN? to connected redpitaya device and displays device response"""
+        """
+        Used to send SCPI string like *IDN? to connected redpitaya device and return device response.
+        """
         dev=self.selectedDevice(c)
-        yield dev.query(phrase)
+        ans=yield dev.query(phrase)
+        returnValue(ans)
+        #also prints to server
+        print ans
 
     @setting(110)
     def read_cons(self,c):
-        """Reads out what is on the red pitaya console"""
+        """
+        Reads out what is on the red pitaya console.
+        """
         dev=self.selectedDevice(c)
-        yield dev.read_cons()
+        cons_resp=yield dev.read_cons()
+        returnValue(cons_resp)
 
     @setting(111,msg='s')
     def write_cons(self,c,msg):
-        """Sends  message string to the red pitaya console"""
+        """
+        Sends raw message string to the red pitaya console.
+        """
         dev=self.selectedDevice(c)
         yield dev.write_cons(msg)
 
-    @setting(112,n='i',Ns='i')
+    @setting(112,n='i',Ns='i', returns='*v')
     def acquire(self,c,n,Ns):
-        """Takes in a specified number of data samples on a given input channel, with specified sampling rate, number of decimals, and units. This data is stored in the buffer of the input channel used.
-        acquire(n,Ns)
-        n = input#  1 or 2
-        Ns = Number of samples that will be taken. Currently, device is commanded to read samples from the very first recorded in the buffer, up to the Ns endpoint. 
-        
-        Default sampling rate is 125MHz, with decimation of 1. Change rate with acq_dec function.
-        The returned data is by default of type 'float'. Supported types are:'FLOAT', 'ASCII', so left to the user to pass manually.
-        The default units of returned data is volts. Supported types are:'Supported types are:'VOLTS', 'RAW', so left to the user to pass manually. """
-
+        """
+        :param n: sma output number
+        :param Ns: number of data samples to be taken on the output.
+        :return: returns voltage sample data taken at the current sampling rate.
+        :rtype: time ordered list of float objects.
+        """
         dev=self.selectedDevice(c)
-        yield dev.acquire(n,Ns)
+        data=yield dev.acquire(n,Ns)
+        returnValue(data)
 
     @setting(113,dec='i')
     def acq_dec(self,c,dec):
-        """Sets decimation, i.e. integer downsampling factor. Ex: if dec=8, will only record the 8th sample taken at the sampling frequency. Allowed: dec = 1,8,64,1024,8192,65536. """
+        """
+        :param dec: Sets decimation, i.e. downsampling factor 1/dec. dec=[1,8,64,1024,8192,65536]
+        :returns: Sets and then returns the decimation factor.
+        """
         decimation=[1,8,64,1024,8192,65536]
         if dec in decimation:
             dev=self.selectedDevice(c)
-            yield dev.acq_dec(dec)
+            decimate=yield dev.acq_dec(dec)
+            returnValue(decimate)
+            print 'Decimation factor set to: ', decimate
         else:
             print 'Error: Not an allowed decimation factor. Allowed: dec = 1,8,64,1024,8192,65536.'
 
