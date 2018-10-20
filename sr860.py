@@ -155,6 +155,16 @@ class sr860Wrapper(GPIBDeviceWrapper):
             returnValue(int(resp))
 
     @inlineCallbacks
+    def harmonic_dual(self, h = None):
+        if h is None:
+            resp = yield self.query('HARMDUAL?')
+            returnValue(int(resp))
+        else:
+            yield self.write('HARMDUAL' + str(h))
+            resp = yield self.query('HARMDUAL?')
+            returnValue(int(resp))
+
+    @inlineCallbacks
     def gnd_mode(self,  mode = None):
         if mode is None:
             resp = yield self.query('IGND?')
@@ -176,8 +186,8 @@ class sr860Wrapper(GPIBDeviceWrapper):
 
     @inlineCallbacks
     def sig_lvl(self):
-		resp = yield self.query('ILVL?')
-		returnValue(int(resp))
+        resp = yield self.query('ILVL?')
+        returnValue(int(resp))
 
     @inlineCallbacks
     def sine_out_amplitude(self,  amp = None):
@@ -376,24 +386,6 @@ class sr860Wrapper(GPIBDeviceWrapper):
             returnValue(getSensitivity(int(resp)))
 
     @inlineCallbacks
-    def auto_sensitivity(self):
-        waittime = yield self.wait_time(c)
-        r = yield self.r(c)
-        sens = yield self.sensitivity(c)
-        while r/sens > 0.95:
-            #print "sensitivity up... ",
-            yield self.sensitivity_up(c)
-            yield util.wakeupCall(waittime)
-            r = yield self.r(c)
-            sens = yield self.sensitivity(c)
-        while r/sens < 0.35:
-            #print "sensitivity down... ",
-            yield self.sensitivity_down(c)
-            yield util.wakeupCall(waittime)
-            r = yield self.r(c)
-            sens = yield self.sensitivity(c)
-
-    @inlineCallbacks
     def auto_gain(self):
         yield self.write("AGAN");
         done = False
@@ -411,50 +403,35 @@ class sr860Wrapper(GPIBDeviceWrapper):
             yield self.write('OFSL ' + str(i))
             returnValue(i)
 
-    @inlineCallbacks
-    def wait_time(self):
-        tc = yield self.query("OFLT?")
-        tc = getTC(int(tc))
-        slope = yield self.query("OFSL?")
-        slope = int(slope)
-        if slope == 0:
-            returnValue(5*tc)
-        elif slope == 1:
-            returnValue(7*tc)
-        elif slope == 2:
-            returnValue(9*tc)
-        else:# slope == 3:
-            returnValue(10*tc)
-
 
 class sr860Server(GPIBManagedServer):
     name = 'sr860'
     deviceName = 'Stanford_Research_Systems SR860'
-    deviceIdentFunc = 'identify_device'
+    # deviceIdentFunc = 'identify_device'
     deviceWrapper = sr860Wrapper
 
-    @setting(9988, server='s', address='s')
-    def identify_device(self, c, server, address):
-        print 'identifying:', server, address
-        try:
-            s = self.client[server]
-            p = s.packet()
-            p.address(address)
-            p.write_termination('\r')
-            p.read_termination('\r')
-            p.write('*IDN?')
-            p.read()
-            p.write('*IDN?')
-            p.read()
-            ans = yield p.send()
-            resp = ans.read[1]
-            print 'got ident response:', resp
-            if resp == 'Stanford_Research_Systems,SR860,003329,V1.47':
-                returnValue(self.deviceName)
-        except Exception, e:
-            print 'failed:', e
-            print 'what what...'
-            raise
+    # @setting(9988, server='s', address='s')
+    # def identify_device(self, c, server, address):
+    #     print 'identifying:', server, address
+    #     try:
+    #         s = self.client[server]
+    #         p = s.packet()
+    #         p.address(address)
+    #         p.write_termination('\r')
+    #         p.read_termination('\r')
+    #         p.write('*IDN?')
+    #         p.read()
+    #         p.write('*IDN?')
+    #         p.read()
+    #         ans = yield p.send()
+    #         resp = ans.read[1]
+    #         print 'got ident response:', resp
+    #         if resp == 'Stanford_Research_Systems,SR860,003329,V1.47':
+    #             returnValue(self.deviceName)
+    #     except Exception, e:
+    #         print 'failed:', e
+    #         print 'what what...'
+    #         raise
 
     @setting(99, 'outputUnit', returns='?')
     def outputUnit(self, c):
@@ -495,11 +472,12 @@ class sr860Server(GPIBManagedServer):
         else:
             resp = yield dev.phase(ph)
             returnValue(float(resp))
+            
     @setting(104, 'Reference', ref=[': query reference source', 'i: set external (0) or internal (1) reference source'], returns='i')
     def reference(self, c, ref = None):
         """
-		sets/gets the reference source. (internal source = 0 ; external source = 1 ; dual = 2 ; chop = 3)
-		"""
+        sets/gets the reference source. (internal source = 0 ; external source = 1 ; dual = 2 ; chop = 3)
+        """
         dev = self.selectedDevice(c)
         if ref is None:
             resp = yield dev.reference()
@@ -537,7 +515,7 @@ class sr860Server(GPIBManagedServer):
     def harmonic(self, c, h = None):
         """
         Get/set the harmonic.
-        Harmonic can be set as high as 19999 but is capped at a frequency of 102kHz.
+        Harmonic can be set as high as 19999 but is capped at a frequency of 500kHz.
         """
         dev = self.selectedDevice(c)
         if h is None:
@@ -545,6 +523,20 @@ class sr860Server(GPIBManagedServer):
             returnValue(int(resp))
         else:
             resp = yield dev.harmonic(h)
+            returnValue(resp)
+
+    @setting(207, 'Harmonic Dual', h=[': query harmonic', 'i: set harmonic'], returns='i')
+    def harmonic_dual(self, c, h = None):
+        """
+        Get/set the harmonic for external reference in dual mode.
+        Harmonic can be set as high as 19999 but is capped at a frequency of 500kHz.
+        """
+        dev = self.selectedDevice(c)
+        if h is None:
+            resp = yield dev.harmonic_dual()
+            returnValue(int(resp))
+        else:
+            resp = yield dev.harmonic_dual(h)
             returnValue(resp)
 
     @setting(108, 'sine_out_amplitude', amp=[': query', 'v: set'], returns='v')
@@ -620,8 +612,8 @@ class sr860Server(GPIBManagedServer):
             resp = yield dev.trigger_z(z_in)
             returnValue(int(resp))
 
-    @setting(113, 'iv_input_mode', mode = 'i', returns='i')
-    def iv_input_mode(self, c, mode = None):
+    @setting(113, 'inputMode', mode = 'i', returns='i')
+    def inputMode(self, c, mode = None):
         ''' gets/sets the signal input to voltage (0) or current (1)
         '''
         dev = self.selectedDevice(c)
@@ -675,7 +667,7 @@ class sr860Server(GPIBManagedServer):
         if int(n) < 1 or int(n) > 4:
             raise ValueError("n must be 1,2,3, or 4!")
         else:
-			n = int(n) - 1
+            n = int(n) - 1
         resp = yield dev.aux_input(n)
         returnValue(float(resp))
 
@@ -686,7 +678,7 @@ class sr860Server(GPIBManagedServer):
         if int(n) < 1 or int(n) > 4:
             raise ValueError("n must be 1,2,3, or 4!")
         else:
-			n = int(n) - 1
+            n = int(n) - 1
         if v is None:
             resp = yield dev.aux_output(n)
             returnValue(float(resp))
@@ -774,40 +766,37 @@ class sr860Server(GPIBManagedServer):
     def time_constant(self, c, tc=None):
         """ Set/get the time constant. i=0 --> 1 us; 1-->3us, 2-->10us, 3-->30us, ..., 21 --> 30ks """
         dev = self.selectedDevice(c)
-        if tc is None:
-            resp = yield dev.query("OFLT?")
-            returnValue(getTC(int(resp)))
-        else:
+        if tc is not None:
             tc = getTCInt(tc)
             yield dev.write('OFLT {}'.format(tc))
-            resp = yield dev.query("OFLT?")
-            returnValue(getTC(int(resp)))
+        resp = yield dev.query("OFLT?")
+        returnValue(getTC(int(resp)))
 
     @setting(130, 'Sensitivity', i='v', returns='v')
     def sensitivity(self, c, i=None):
         """ Set/get the sensitivity. To set the sensitivity, input the voltage sensitivity in Volts or the current sensitivity in Amps.
 
-		Lookup table in the manual: i=27 --> 1 nV/fA; 26-->5nV/fA, 25-->10nV/fA, 24-->20nV/fA, ..., 0 --> 1V/uA
-		"""
+        Lookup table in the manual: i=27 --> 1 nV/fA; 26-->5nV/fA, 25-->10nV/fA, 24-->20nV/fA, ..., 0 --> 1V/uA
+        """
         dev = self.selectedDevice(c)
         iv_mode = yield dev.input_mode()
         if int(iv_mode) == 0:
-			u = units.V
+            u = units.V
         elif int(iv_mode) == 1:
-			u = units.A
+            u = units.A
         else:
-			u = 'none'
+            u = 'none'
         if i is None:
             resp = yield dev.sensitivity()
             if u != 'none':
-                returnValue(resp * u)
+                returnValue(resp)
             else:
                 returnValue(resp)
         else:
             jj = getSensitivityInt(i, int(iv_mode))
             resp = yield dev.sensitivity(jj)
             if u != 'none':
-                returnValue(resp * u)
+                returnValue(resp )
             else:
                 returnValue(resp)
 
@@ -878,30 +867,64 @@ class sr860Server(GPIBManagedServer):
     @setting(137, 'sensitivity_up', returns='v')
     def sensitivity_up(self, c):
         """ Increases the sensitivity one increment
-		"""
+        """
         dev = self.selectedDevice(c)
         sens = yield dev.query('SCAL?')
-        if int(sens) < 27 and int(sens) >= 0:
-            yield dev.write(int(sens) + 1)
-        else:
-            pass
-        resp = yield dev.query('SCAL?')
-        returnValue(getSensitivity(resp))
+        sens = getSensitivity(int(sens)-1)
+        sens = yield self.sensitivity(c, sens)
+        returnValue(sens)
+
 
     @setting(138, 'sensitivity_down', returns='v')
     def sensitivity_down(self, c):
         """ Decreases the sensitivity one increment
-		"""
+        """
         dev = self.selectedDevice(c)
         sens = yield dev.query('SCAL?')
-        if int(sens) <= 27 and int(sens) > 0:
-            yield dev.write(int(sens) - 1)
-        else:
-            pass
-        resp = yield dev.query('SCAL?')
-        returnValue(getSensitivity(resp))
+        sens = getSensitivity(int(sens)+1)
+        sens = yield self.sensitivity(c, sens)
+        returnValue(sens)
 
 
+    @setting(139, 'Wait Time', returns='v')
+    def wait_time(self, c):
+        """Returns the recommended wait time given current time constant and low-pass filter slope."""
+        dev = self.selectedDevice(c)
+        tc = yield dev.query("OFLT?")
+        tc = getTC(int(tc))
+        slope = yield dev.query("OFSL?")
+        slope = int(slope)
+        if slope == 0:
+            returnValue(5*tc) # recommended 5
+        elif slope == 1:
+            returnValue(7*tc) # 7
+        elif slope == 2:
+            returnValue(9*tc)
+        else:# slope == 3:
+            returnValue(10*tc) # 10 etc.
+
+    @setting(140, "Auto Sensitivity")
+    def auto_sensitivity(self, c):
+        """Automatically adjusts sensitivity until signal is between 35% and 95% of full range."""
+        waittime = yield self.wait_time(c)
+        r = yield self.r(c)
+        sens = yield self.sensitivity(c)
+        mode = yield self.inputMode(c)
+        while r == 0:
+            sens = getSensitivity(getSensitivityInt(sens, mode)-5)
+            sens = yield self.sensitivity(c, sens)
+            r = yield self.r(c)
+
+        if r/sens < 0.35:
+            sens = getSensitivity(getSensitivityInt(r/0.35, mode))
+            sens = yield self.sensitivity(c, sens)
+            r = yield self.r(c)
+
+        while r/sens > 0.35:
+            yield self.sensitivity_up(c)
+            yield util.wakeupCall(waittime)
+            r = yield self.r(c)
+            sens = yield self.sensitivity(c)
 
 
 __server__ = sr860Server()
@@ -909,3 +932,4 @@ __server__ = sr860Server()
 if __name__ == '__main__':
     from labrad import util
     util.runServer(__server__)
+    ## working versions
