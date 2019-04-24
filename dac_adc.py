@@ -17,7 +17,7 @@
 ### BEGIN NODE INFO
 [info]
 name = DAC-ADC
-version = 1.2.0
+version = 1.2.0a
 description = DAC-ADC Box server: AD5764-AD7734, AD5780-AD7734, AD5791-AD7734
 [startup]
 cmdline = %PYTHON% %FILE%
@@ -43,10 +43,20 @@ TIMEOUT = Value(5,'s')
 BAUD    = 115200
 
 def twoByteToInt(DB1,DB2): # This gives a 16 bit integer (between +/- 2^16)
-  return 256*DB1 + DB2
+    return 256*DB1 + DB2
 
 def map2(x, in_min, in_max, out_min, out_max):
-  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+
+def threeByteToInt(b1, b2, b3):
+    return ((((b1 & 15) << 8) | b2) <<8 ) | b3
+
+def intToVoltage2sc(d, dac_full_scale = 10.0):
+    if d <= 524287:
+        v = 1.0* d * dac_full_scale/524287
+    else:
+        v = -(1048576 - d) * dac_full_scale/524288
+    return v
 
 
 class DAC_ADCWrapper(DeviceWrapper):
@@ -329,6 +339,17 @@ class DAC_ADCServer(DeviceServer):
         yield dev.read()
 
         returnValue(channels)
+
+    @setting(773, returns='v')
+    def test3byteRead(self, c):
+        dev = self.selectedDevice(c)
+        yield dev.write("PID_RUN\r")
+        data = yield dev.readByte(3)
+        bdata = [int(b.encode('hex'), 16) for b in data]
+        
+        voltage = intToVoltage2sc( threeByteToInt(*bdata))
+
+        returnValue(voltage)
 
     @setting(108,dacPorts='*i', adcPorts='*i', ivoltages='*v[]', fvoltages='*v[]', steps='i',delay='v[]',nReadings='i',adcSteps='i',returns='**v[]')#(*v[],*v[])')
     def buffer_ramp_dis(self,c,dacPorts,adcPorts,ivoltages,fvoltages,steps,delay,adcSteps,nReadings=1):
