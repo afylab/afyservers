@@ -355,8 +355,8 @@ class DAC_ADCServer(DeviceServer):
 
         returnValue(voltage)
 
-    @setting(774, kp='v[]', ki='v[]', vmin='v[]', vmax='v[]', setpoint='v[]')
-    def pid_setup(self, c, kp, ki, vmin, vmax, setpoint):
+    @setting(774, kp='v[]', ki='v[]', vmin='v[]', vmax='v[]', setpoint='v[]', fbinit='v[]')
+    def pid_setup(self, c, kp, ki, vmin, vmax, setpoint, fbinit):
         dev = self.selectedDevice(c)
         yield dev.write("PID_SET,{},{},{},{},{}\r".format(kp, ki, vmin, vmax, setpoint))
         yield dev.read()
