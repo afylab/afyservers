@@ -340,16 +340,48 @@ class DAC_ADCServer(DeviceServer):
 
         returnValue(channels)
 
-    @setting(773, returns='v')
-    def test3byteRead(self, c):
+    @setting(773, test='i', returns='v[]')
+    def test3byteRead(self, c, test):
         dev = self.selectedDevice(c)
-        yield dev.write("PID_RUN\r")
+        yield dev.write("PID_RUN,{}\r".format(test))
         data = yield dev.readByte(3)
         bdata = [int(b.encode('hex'), 16) for b in data]
+
+        checkCondition = (bdata[0]&16!=0)
         
         voltage = intToVoltage2sc( threeByteToInt(*bdata))
+        print(checkCondition)
+
 
         returnValue(voltage)
+
+    @setting(774, kp='v[]', ki='v[]', vmin='v[]', vmax='v[]', setpoint='v[]')
+    def pid_setup(self, c, kp, ki, vmin, vmax, setpoint):
+        dev = self.selectedDevice(c)
+        yield dev.write("PID_SET,{},{},{},{},{}\r".format(kp, ki, vmin, vmax, setpoint))
+        yield dev.read()
+
+
+    @setting(775)
+    def pid_reset(self, c):
+        dev = self.selectedDevice(c)
+        yield dev.write("PID_RESET\r")
+        yield dev.read()
+
+
+
+    @setting(776, adcPort='i', dacPort='i', iterN='i', tol='v[]', window='i', wait_time='i', scale='v[]', returns='s')
+    def pid_run(self, c, adcPort, dacPort, iterN, tol, window, wait_time, scale):
+        dev = self.selectedDevice(c)
+        yield dev.write("PID_RUN,{},{},{},{},{},{},{}\r".format(adcPort, dacPort, iterN, tol, window, wait_time, scale))
+        data = yield dev.readByte(3)
+        bdata = [int(b.encode('hex'), 16) for b in data]
+        voltage = intToVoltage2sc( threeByteToInt(*bdata))
+        yield dev.read()
+
+        returnValue(data)
+
+
 
     @setting(108,dacPorts='*i', adcPorts='*i', ivoltages='*v[]', fvoltages='*v[]', steps='i',delay='v[]',nReadings='i',adcSteps='i',returns='**v[]')#(*v[],*v[])')
     def buffer_ramp_dis(self,c,dacPorts,adcPorts,ivoltages,fvoltages,steps,delay,adcSteps,nReadings=1):
