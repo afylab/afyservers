@@ -263,7 +263,7 @@ class DAC_ADCServer(DeviceServer):
         ans = yield dev.read()
         returnValue(ans)
 
-    @setting(107,dacPorts='*i', adcPorts='*i', ivoltages='*v[]', fvoltages='*v[]', steps='i',delay='v[]',nReadings='i',returns='**v[]')#(*v[],*v[])')
+    @setting(107,dacPorts=['*i: Ports'], adcPorts='*i', ivoltages='*v[]', fvoltages='*v[]', steps='i',delay='v[]',nReadings='i',returns='**v[]')#(*v[],*v[])')
     def buffer_ramp(self,c,dacPorts,adcPorts,ivoltages,fvoltages,steps,delay,nReadings=1):
         """
         BUFFER_RAMP ramps the specified output channels from the initial voltages to the final voltages and reads the specified input channels in a synchronized manner. 
@@ -340,46 +340,72 @@ class DAC_ADCServer(DeviceServer):
 
         returnValue(channels)
 
-    @setting(773, test='i', returns='v[]')
-    def test3byteRead(self, c, test):
-        dev = self.selectedDevice(c)
-        yield dev.write("PID_RUN,{}\r".format(test))
-        data = yield dev.readByte(3)
-        bdata = [int(b.encode('hex'), 16) for b in data]
+    # @setting(773, test=['i: Condition'], returns=['v[]: voltage'])
+    # def test3byteRead(self, c, test):
+    #     dev = self.selectedDevice(c)
+    #     yield dev.write("PID_RUN,{}\r".format(test))
+    #     data = yield dev.readByte(3)
+    #     bdata = [int(b.encode('hex'), 16) for b in data]
 
-        checkCondition = (bdata[0]&16!=0)
+    #     checkCondition = (bdata[0]&16!=0)
         
-        voltage = intToVoltage2sc( threeByteToInt(*bdata))
-        print(checkCondition)
+    #     voltage = intToVoltage2sc( threeByteToInt(*bdata))
+    #     print(checkCondition)
 
 
-        returnValue(voltage)
+    #     returnValue(voltage)
 
     @setting(774, kp='v[]', ki='v[]', vmin='v[]', vmax='v[]', setpoint='v[]', fbinit='v[]')
     def pid_setup(self, c, kp, ki, vmin, vmax, setpoint, fbinit):
+        """
+        Setup PID parameters
+        """
         dev = self.selectedDevice(c)
-        yield dev.write("PID_SET,{},{},{},{},{}\r".format(kp, ki, vmin, vmax, setpoint))
+        yield dev.write("PID_SET,{},{},{},{},{},{}\r".format(kp, ki, vmin, vmax, setpoint, fbinit))
         yield dev.read()
 
 
     @setting(775)
     def pid_reset(self, c):
+        """
+        Resets the PID's accumulated errors and last feedback value
+        """
         dev = self.selectedDevice(c)
         yield dev.write("PID_RESET\r")
         yield dev.read()
 
 
-
-    @setting(776, adcPort='i', dacPort='i', iterN='i', tol='v[]', window='i', wait_time='i', scale='v[]', returns='s')
+    @setting(776, adcPort='i', dacPort='i', iterN='i', tol='v[]', window='i', wait_time='i', scale='v[]', returns=['**v[]: (Error Signal, Feedback Values)'])
     def pid_run(self, c, adcPort, dacPort, iterN, tol, window, wait_time, scale):
         dev = self.selectedDevice(c)
         yield dev.write("PID_RUN,{},{},{},{},{},{},{}\r".format(adcPort, dacPort, iterN, tol, window, wait_time, scale))
-        data = yield dev.readByte(3)
-        bdata = [int(b.encode('hex'), 16) for b in data]
-        voltage = intToVoltage2sc( threeByteToInt(*bdata))
+
+        data = []
+        lastbyte = False;
+        dev.setramping(True)
+        while (dev.isramping() and not lastbyte):
+            bytestoread = yield dev.in_waiting()
+            if (bytestoread > 5):
+                tmp = yield dev.readByte(5) 
+                tmp = [int(b.encode('hex'), 16) for b in tmp]
+                if tmp[-3] & 16 == 16:
+                    lastbyte = True
+                data += tmp
+        dev.setramping(False)
+        errsignal = []
+        fbvalue = []
+
+        for i in range(0, len(data), 5):
+            errsignal.append(map2(twoByteToInt(*data[i:i+2]), 0, 65536, -10.0, 10.0))
+            fbvalue.append(intToVoltage2sc(threeByteToInt(*data[i+2:i+5])))
+
+        result = []
+        result.append(errsignal)
+        result.append(fbvalue)
+
         yield dev.read()
 
-        returnValue(data)
+        returnValue(result)
 
 
 
@@ -637,6 +663,7 @@ class DAC_ADCServer(DeviceServer):
             yield dev.write("GET_ADC,%i\r"%port)
             ans = yield dev.read()
             self.sigInputRead([str(port),str(ans)])
+
 
     def sleep(self,secs):
         """Asynchronous compatible sleep command. Sleeps for given time in seconds, but allows
