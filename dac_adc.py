@@ -396,7 +396,7 @@ class DAC_ADCServer(DeviceServer):
         fbvalue = []
 
         for i in range(0, len(data), 5):
-            errsignal.append(map2(twoByteToInt(*data[i:i+2]), 0, 65536, -10.0, 10.0))
+            errsignal.append(map2(twoByteToInt(*data[i:i+2]), 0, 65536, -10.0, 10.0) * scale)
             fbvalue.append(intToVoltage2sc(threeByteToInt(*data[i+2:i+5])))
 
         result = []
