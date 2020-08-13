@@ -196,7 +196,7 @@ class DAC_ADCServer(DeviceServer):
         dev=self.selectedDevice(c)
         yield dev.connect(server,port)
 
-    @setting(103,port='i',bits='i',returns='s')
+    @setting(102,port='i',bits='i',returns='s')
     def set_bits(self,c,port,bits):
     	if not (port in range(4)):
     		returnValue("Error: invalid port number.")
