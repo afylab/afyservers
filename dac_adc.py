@@ -196,6 +196,18 @@ class DAC_ADCServer(DeviceServer):
         dev=self.selectedDevice(c)
         yield dev.connect(server,port)
 
+    @setting(102,port='i',bits='i',returns='s')
+    def set_bits(self,c,port,bits):
+    	if not (port in range(4)):
+    		returnValue("Error: invalid port number.")
+    	if (bits>2097151) or (bits<0):
+    		returnValue("Error: invalid bits. It must be between 0 and 2097151.")
+    	dev=self.selectedDevice(c)
+    	yield dev.write("SET_BITS,%i,%f\r"%(port,bits))
+    	ans = yield dev.read()
+        voltage=ans.lower().partition(' to ')[2][:-1]
+        self.sigOutputSet([str(port),voltage])
+        returnValue(ans)
 
     @setting(103,port='i',voltage='v',returns='s')
     def set_voltage(self,c,port,voltage):
@@ -553,19 +565,6 @@ class DAC_ADCServer(DeviceServer):
         dev=self.selectedDevice(c)
         yield dev.write("FULL_SCALE,%f\r"%(voltage))
         ans = yield dev.read()
-        returnValue(ans)
-
-    @setting(121,port='i',bits='i',returns='s')
-    def set_bits(self,c,port,bits):
-    	if not (port in range(4)):
-    		returnValue("Error: invalid port number.")
-    	if (bits>2097151) or (bits<0):
-    		returnValue("Error: invalid bits. It must be between 0 and 2097151.")
-    	dev=self.selectedDevice(c)
-    	yield dev.write("SET_BITS,%i,%f\r"%(port,bits))
-    	ans = yield dev.read()
-        voltage=ans.lower().partition(' to ')[2][:-1]
-        self.sigOutputSet([str(port),voltage])
         returnValue(ans)
 
     @setting(9002)
