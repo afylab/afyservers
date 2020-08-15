@@ -559,7 +559,7 @@ class DAC_ADCServer(DeviceServer):
     def set_bits(self,c,port,bits):
     	if not (port in range(4)):
     		returnValue("Error: invalid port number.")
-    	if (bits>2097151) or (bits<0):
+    	if (bits>1048575) or (bits<0):
     		returnValue("Error: invalid bits. It must be between 0 and 2097151.")
     	dev=self.selectedDevice(c)
     	yield dev.write("SET_BITS,%i,%f\r"%(port,bits))
