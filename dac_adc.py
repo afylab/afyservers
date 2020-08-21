@@ -558,7 +558,7 @@ class DAC_ADCServer(DeviceServer):
     @setting(121,port='i',bits='i',returns='s')
     def set_bits(self,c,port,bits):
         """
-        Inputs the bits directly to the DAC and returns the channel and the voltage it set.
+        Inputs the bits directly to the DAC channel and returns the channel and the voltage it set.
         """
     	if not (port in range(4)):
     		returnValue("Error: invalid port number.")
