@@ -17,7 +17,7 @@
 ### BEGIN NODE INFO
 [info]
 name = Data Vault
-version = 2.3.4
+version = 3.0.1
 description = Store and retrieve numeric data
 
 [startup]
@@ -55,13 +55,10 @@ def load_settings(cxn, name):
     used later.
     """
     path = ['', 'Servers', name, 'Repository']
-    print path
     nodename = labrad.util.getNodeName()
-    print nodename
     reg = cxn.registry
     yield reg.cd(path, True)
     (dirs, keys) = yield reg.dir()
-    print (dirs, keys)
     if nodename in keys:
         datadir = yield reg.get(nodename)
     elif '__default__' in keys:
@@ -88,11 +85,9 @@ def main(argv=sys.argv):
     @inlineCallbacks
     def start():
         opts = labrad.util.parseServerOptions(name=DataVault.name)
-        print opts
         cxn = yield labrad.wrappers.connectAsync(
             host=opts['host'], port=int(opts['port']), password=opts['password'])
         datadir = yield load_settings(cxn, opts['name'])
-        print datadir
         yield cxn.disconnect()
         session_store = SessionStore(datadir, hub=None)
         server = DataVault(session_store)

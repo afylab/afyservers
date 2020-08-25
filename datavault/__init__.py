@@ -2,6 +2,7 @@ import base64
 from datetime import datetime
 import os
 import re
+import collections
 import weakref
 
 from labrad import types as T
@@ -38,7 +39,6 @@ def filename_decode(name):
 
 def filedir(datadir, path):
     return os.path.join(datadir, *[filename_encode(d) + '.dir' for d in path[1:]])
-
 
 ## time formatting
 
@@ -198,9 +198,10 @@ class Session(object):
     def listContents(self, tagFilters):
         """Get a list of directory names in this directory."""
         files = os.listdir(self.dir)
-        files.sort()
         dirs = [filename_decode(s[:-4]) for s in files if s.endswith('.dir')]
-        datasets = [filename_decode(s[:-4]) for s in files if s.endswith('.csv') or s.endswith('.bin')]
+        csv_datasets = [filename_decode(s[:-4]) for s in files if s.endswith('.ini') and s.lower() != 'session.ini' ]
+        hdf5_datasets = [filename_decode(s[:-5]) for s in files if s.endswith('.hdf5')]
+        datasets = sorted(csv_datasets + hdf5_datasets)
         # apply tag filters
         def include(entries, tag, tags):
             """Include only entries that have the specified tag."""
@@ -216,26 +217,30 @@ class Session(object):
                 tag = tag[1:]
             else:
                 filter = include
-            #print filter.__name__ + ':', tag
-            #print 'before:', dirs, datasets
             dirs = filter(dirs, tag, self.session_tags)
             datasets = filter(datasets, tag, self.dataset_tags)
-            #print 'after:', dirs, datasets
-        return dirs, datasets
+        return sorted(dirs), sorted(datasets)
 
     def listDatasets(self):
         """Get a list of dataset names in this directory."""
         files = os.listdir(self.dir)
-        files.sort()
-        return [filename_decode(s[:-4]) for s in files if s.endswith('.csv') or s.endswith('.bin')]
+        filenames = []
+        for s in files:
+            base, _, ext = s.rpartition('.')
+            if ext in ['csv', 'hdf5']:
+                filenames.append(filename_decode(base))
+        return sorted(filenames)
 
-    def newDataset(self, title, independents, dependents):
+    def newDataset(self, title, independents, dependents, extended=False):
         num = self.counter
         self.counter += 1
         self.modified = datetime.now()
 
         name = '%05d - %s' % (num, title)
-        dataset = Dataset(self, name, title, create=True, independents=independents, dependents=dependents)
+        dataset = Dataset(self, name, title, create=True,
+                          independents=independents,
+                          dependents=dependents,
+                          extended=extended)
         self.datasets[name] = dataset
         self.access()
 
@@ -257,7 +262,7 @@ class Session(object):
 
         filename = filename_encode(name)
         file_base = os.path.join(self.dir, filename)
-        if not (os.path.exists(file_base + '.csv') or os.path.exists(file_base + '.bin')):
+        if not (os.path.exists(file_base + '.csv') or os.path.exists(file_base + '.hdf5')):
             raise errors.DatasetNotFoundError(name)
 
         if name in self.datasets:
@@ -318,158 +323,78 @@ class Session(object):
         return sessTags, dataTags
 
 class Dataset(object):
-    def __init__(self, session, name, title=None, num=None, create=False, independents=[], dependents=[]):
+    """
+    This object basically takes care of listeners and notifications.
+    All the actual data or metadata access is proxied through to a
+    backend object.
+    """
+    def __init__(self, session, name, title=None, create=False, independents=[], dependents=[], extended=False):
         self.hub = session.hub
         self.name = name
         file_base = os.path.join(session.dir, filename_encode(name))
-        self.infofile = file_base + '.ini'
         self.listeners = set() # contexts that want to hear about added data
         self.param_listeners = set()
         self.comment_listeners = set()
 
         if create:
-            self.title = title
-            self.created = self.accessed = self.modified = datetime.now()
-            self.independents = [self.makeIndependent(i) for i in independents]
-            self.dependents = [self.makeDependent(d) for d in dependents]
-            self.parameters = []
-            self.comments = []
+            indep = [self.makeIndependent(i, extended) for i in independents]
+            dep = [self.makeDependent(d, extended) for d in dependents]
+            self.data = backend.create_backend(file_base, title, indep, dep, extended)
             self.save()
         else:
+            self.data = backend.open_backend(file_base)
             self.load()
             self.access()
 
-        self.data = backend.create_backend(file_base, cols=len(self.independents) + len(self.dependents))
+    def save(self):
+        self.data.save()
 
     def load(self):
-        S = util.DVSafeConfigParser()
-        S.read(self.infofile)
+        self.data.load()
 
-        gen = 'General'
-        self.title = S.get(gen, 'Title', raw=True)
-        self.created = time_from_str(S.get(gen, 'Created'))
-        self.accessed = time_from_str(S.get(gen, 'Accessed'))
-        self.modified = time_from_str(S.get(gen, 'Modified'))
-
-        def getInd(i):
-            sec = 'Independent %d' % (i+1)
-            label = S.get(sec, 'Label', raw=True)
-            units = S.get(sec, 'Units', raw=True)
-            return dict(label=label, units=units)
-        count = S.getint(gen, 'Independent')
-        self.independents = [getInd(i) for i in range(count)]
-
-        def getDep(i):
-            sec = 'Dependent %d' % (i+1)
-            label = S.get(sec, 'Label', raw=True)
-            units = S.get(sec, 'Units', raw=True)
-            categ = S.get(sec, 'Category', raw=True)
-            return dict(label=label, units=units, category=categ)
-        count = S.getint(gen, 'Dependent')
-        self.dependents = [getDep(i) for i in range(count)]
-
-        def getPar(i):
-            sec = 'Parameter %d' % (i+1)
-            label = S.get(sec, 'Label', raw=True)
-            raw = S.get(sec, 'Data', raw=True)
-            if raw.startswith(DATA_URL_PREFIX):
-                # decode parameter data from dataurl
-                all_bytes = base64.urlsafe_b64decode(raw[len(DATA_URL_PREFIX):])
-                t, data_bytes = T.unflatten(all_bytes, 'ss')
-                data = T.unflatten(data_bytes, t)
-            else:
-                # old parameters may have been saved using repr
-                try:
-                    data = T.evalLRData(raw)
-                except RuntimeError:
-                    if raw.endswith('None)'):
-                        data = T.evalLRData(raw[0:-5] + '"")')
-                    else:
-                        raise
-            return dict(label=label, data=data)
-        count = S.getint(gen, 'Parameters')
-        self.parameters = [getPar(i) for i in range(count)]
-
-        # get comments if they're there
-        if S.has_section('Comments'):
-            def getComment(i):
-                sec = 'Comments'
-                time, user, comment = eval(S.get(sec, 'c%d' % i, raw=True))
-                return time_from_str(time), user, comment
-            count = S.getint(gen, 'Comments')
-            self.comments = [getComment(i) for i in range(count)]
-        else:
-            self.comments = []
-
-    def save(self):
-        S = util.DVSafeConfigParser()
-
-        sec = 'General'
-        S.add_section(sec)
-        S.set(sec, 'Created',  time_to_str(self.created))
-        S.set(sec, 'Accessed', time_to_str(self.accessed))
-        S.set(sec, 'Modified', time_to_str(self.modified))
-        S.set(sec, 'Title',       self.title)
-        S.set(sec, 'Independent', repr(len(self.independents)))
-        S.set(sec, 'Dependent',   repr(len(self.dependents)))
-        S.set(sec, 'Parameters',  repr(len(self.parameters)))
-        S.set(sec, 'Comments',    repr(len(self.comments)))
-
-        for i, ind in enumerate(self.independents):
-            sec = 'Independent %d' % (i+1)
-            S.add_section(sec)
-            S.set(sec, 'Label', ind['label'])
-            S.set(sec, 'Units', ind['units'])
-
-        for i, dep in enumerate(self.dependents):
-            sec = 'Dependent %d' % (i+1)
-            S.add_section(sec)
-            S.set(sec, 'Label',    dep['label'])
-            S.set(sec, 'Units',    dep['units'])
-            S.set(sec, 'Category', dep['category'])
-
-        for i, par in enumerate(self.parameters):
-            sec = 'Parameter %d' % (i+1)
-            S.add_section(sec)
-            S.set(sec, 'Label', par['label'])
-            # encode the parameter value as a data-url
-            data_bytes, t = T.flatten(par['data'])
-            all_bytes, _ = T.flatten((str(t), data_bytes), 'ss')
-            data_url = DATA_URL_PREFIX + base64.urlsafe_b64encode(all_bytes)
-            S.set(sec, 'Data', data_url)
-
-        sec = 'Comments'
-        S.add_section(sec)
-        for i, (time, user, comment) in enumerate(self.comments):
-            time = time_to_str(time)
-            S.set(sec, 'c%d' % i, repr((time, user, comment)))
-
-        with open(self.infofile, 'w') as f:
-            S.write(f)
+    def version(self):
+        v = self.data.version
+        return '.'.join(str(x) for x in v)
 
     def access(self):
         """Update time of last access for this dataset."""
-        self.accessed = datetime.now()
+        self.data.access()
         self.save()
 
-    def makeIndependent(self, label):
+    def makeIndependent(self, label, extended):
         """Add an independent variable to this dataset."""
+        if extended:
+            return backend.Independent(*label)
         if isinstance(label, tuple):
             label, units = label
         else:
             label, units = parse_independent(label)
-        return dict(label=label, units=units)
-
-    def makeDependent(self, label):
+        return backend.Independent(label=label, shape=(1,), datatype='v', unit=units)
+    
+    def makeDependent(self, label, extended):
         """Add a dependent variable to this dataset."""
+        if extended:
+            return backend.Dependent(*label)
         if isinstance(label, tuple):
             label, legend, units = label
         else:
             label, legend, units = parse_dependent(label)
-        return dict(category=label, label=legend, units=units)
+        return backend.Dependent(label=label, legend=legend, shape=(1,), datatype='v', unit=units)
+
+    def getIndependents(self):
+        return self.data.getIndependents()
+
+    def getDependents(self):
+        return self.data.getDependents()
+
+    def getRowType(self):
+        return self.data.getRowType()
+
+    def getTransposeType(self):
+        return self.data.getTransposeType()
 
     def addParameter(self, name, data, saveNow=True):
-        self._addParam(name, data)
+        self.data.addParam(name, data)
         if saveNow:
             self.save()
 
@@ -480,7 +405,7 @@ class Dataset(object):
 
     def addParameters(self, params, saveNow=True):
         for name, data in params:
-            self._addParam(name, data)
+            self.data.addParam(name, data)
         if saveNow:
             self.save()
 
@@ -488,22 +413,11 @@ class Dataset(object):
         self.hub.onNewParameter(None, self.param_listeners)
         self.param_listeners = set()
 
-    def _addParam(self, name, data):
-        for p in self.parameters:
-            if p['label'] == name:
-                raise errors.ParameterInUseError(name)
-        d = dict(label=name, data=data)
-        self.parameters.append(d)
-
     def getParameter(self, name, case_sensitive=True):
-        for p in self.parameters:
-            if case_sensitive:
-                if p['label'] == name:
-                    return p['data']
-            else:
-                if p['label'].lower() == name.lower():
-                    return p['data']
-        raise errors.BadParameterError(name)
+        return self.data.getParameter(name, case_sensitive)
+
+    def getParamNames(self):
+        return self.data.getParamNames()
 
     def addData(self, data):
         # append the data to the file
@@ -513,8 +427,8 @@ class Dataset(object):
         self.hub.onDataAvailable(None, self.listeners)
         self.listeners = set()
 
-    def getData(self, limit, start):
-        return self.data.getData(limit, start)
+    def getData(self, limit, start, transpose=False, simpleOnly=False):
+        return self.data.getData(limit, start, transpose, simpleOnly)
 
     def keepStreaming(self, context, pos):
         # keepStreaming does something a bit odd and has a confusing name (ERJ)
@@ -539,7 +453,7 @@ class Dataset(object):
             self.listeners.add(context)
 
     def addComment(self, user, comment):
-        self.comments.append((datetime.now(), user, comment))
+        self.data.addComment(user, comment)
         self.save()
 
         # notify all listening contexts
@@ -547,14 +461,10 @@ class Dataset(object):
         self.comment_listeners = set()
 
     def getComments(self, limit, start):
-        if limit is None:
-            comments = self.comments[start:]
-        else:
-            comments = self.comments[start:start+limit]
-        return comments, start + len(comments)
+        return self.data.getComments(limit, start)
 
     def keepStreamingComments(self, context, pos):
-        if pos < len(self.comments):
+        if pos < self.data.numComments():
             if context in self.comment_listeners:
                 self.comment_listeners.remove(context)
             self.hub.onCommentsAvailable(None, [context])
