@@ -572,7 +572,7 @@ class DAC_ADCServer(DeviceServer):
         returnValue(ans)
 
     @setting(122,port='i',offset='v',amplitude='v',frequency='v',phase='v',update_rate='v',returns='s')
-    def sine_wave(self,c,port,offset,amplitude,frequency,phase,update_rate):
+    def sine_wave(self,c,port,offset,amplitude,frequency,phase,update_rate=10*frequency):
     	if not (port in range(4)):
     		returnValue("Error: invalid port number.")
     	if (offset+amplitude>10) or (offset+amplitude<-10) or (offset-amplitude>10) or (offset-amplitude<-10):
