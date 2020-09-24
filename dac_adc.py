@@ -573,12 +573,25 @@ class DAC_ADCServer(DeviceServer):
 
     @setting(122,port='i',offset='v',amplitude='v',frequency='v',phase='v',updates='i',returns='s')
     def sine_wave(self,c,port,offset,amplitude,frequency,phase,updates=10):
+    	"""
+    	Outputs a sine wave from the DAC channel. Stops when set_voltage or set_bits is called.
+    	"""
     	if not (port in range(4)):
     		returnValue("Error: invalid port number.")
     	if (offset+amplitude>10) or (offset+amplitude<-10) or (offset-amplitude>10) or (offset-amplitude<-10):
     		returnValue("Error: Voltage out of range.")
     	dev=self.selectedDevice(c)
     	yield dev.write("SINE_WAVE,%i,%f,%f,%f,%f,%f\r"%(port,offset,amplitude,frequency,phase,updates))
+    	ans = yield dev.read()
+    	returnValue(ans)
+
+    @setting(123,returns='s')
+    def sync_sine_waves(self,c):
+    	"""
+    	Syncs all sine wave outputs.
+    	"""
+    	dev = self.selectedDevice(c)
+    	yield dev.write("SYNC_SINE_WAVES")
     	ans = yield dev.read()
     	returnValue(ans)
 
