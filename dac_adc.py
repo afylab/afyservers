@@ -562,8 +562,10 @@ class DAC_ADCServer(DeviceServer):
         """
     	if not (port in range(4)):
     		returnValue("Error: invalid port number.")
+    		return
     	if (bits>1048575) or (bits<0):
     		returnValue("Error: invalid bits. It must be between 0 and 2097151.")
+    		return
     	dev=self.selectedDevice(c)
     	yield dev.write("SET_BITS,%i,%f\r"%(port,bits))
     	ans = yield dev.read()
@@ -578,8 +580,13 @@ class DAC_ADCServer(DeviceServer):
     	"""
     	if not (port in range(4)):
     		returnValue("Error: invalid port number.")
+    		return
     	if (offset+amplitude>10) or (offset+amplitude<-10) or (offset-amplitude>10) or (offset-amplitude<-10):
     		returnValue("Error: Voltage out of range.")
+    		return
+    	if (frequency*updates > 35*10**6):
+    		returnValue("Error: Update rate must not exceed 35 MHz.")
+    		return
     	dev=self.selectedDevice(c)
     	yield dev.write("SINE_WAVE,%i,%f,%f,%f,%f,%f\r"%(port,offset,amplitude,frequency,phase,updates))
     	ans = yield dev.read()
