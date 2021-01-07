@@ -270,6 +270,42 @@ class LakeShore372Server(DeviceServer):
     	dev=self.selectedDevice(c)
     	yield dev.write("SETP 0,0.0")
         yield dev.write("HTRSET 0,0\n")
+        
+    @setting(113, out_power='v')
+    def still_out(self,c, out_power):
+        dev = self.selectedDevice(c)
+        """not completed. Need the value of max power and then convert mW to % so that I can use the still command"""
+        """outpower in units... """
+        max_power =
+        power_percent = 100.0*out_power/max_power
+        yield dev.write("STILL %s\n"%power_percent)
+    
+    @setting(114, in_channel='i')
+    def channel_off(self,c, in_channel):
+        dev = self.selectedDevice(c)
+        yield dev.write("INSET %s,0\n"%in_channel)
+    
+    @setting(115, in_channel='i', dwell = 'i', pause = 'i', curve = 'i', tempco='i' ,returns='s')
+    def channel_on(self,c, in_channel, dwell=7, pause=3, curve=0, tempco=2):
+        dev=self.selectedDevice(c)
+        
+        """default value of curve is 0 or  values correspondant to certain in_channels as given in the following dictionary. However, the default is overwritten if user specifies a non-zero value"""
+        crvs = {
+            1: 21,
+            2: 22,
+            3: 23,
+            5: 25,
+            6: 26,
+            9: 29
+        }
+        crv = crvs.get(in_channel)
+        if crv != None && curve==0:
+            curve = crv
+        
+        yield dev.write("INSET %s,1,%s,%s,%s,%s\n"%(in_channel, dwell, pause, curve, tempco))
+        yield dev.write("KRDG? %s\n"%in_channel)
+        ans = yield dev.read()
+        returnValue(ans)
 
     @setting(9001,v='v')
     def do_nothing(self,c,v):
