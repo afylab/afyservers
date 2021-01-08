@@ -306,18 +306,18 @@ class LakeShore372Server(DeviceServer):
     def still_off(self,c):
         """ turn off the still/analog heater"""
         dev = self.selectedDevice(c)
-        yield dev.write("RANGE 2,0")
+        yield dev.write("RANGE 2,0\n")
     
     @setting(117)
     def still_on(self,c):
         """ turn on the still/analog heater"""
         dev = self.selectedDevice(c)
-        yield dev.write("RANGE 2,1")
+        yield dev.write("RANGE 2,1\n")
     
     @setting(118,returns='s')
     def still_read(self,c):
         dev = self.selectedDevice(c)
-        yield dev.write("STILL?\n")
+        yield dev.write("STILL? \n")
         ans = yield dev.read()
         returnValue(ans)
 
