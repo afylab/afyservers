@@ -221,7 +221,7 @@ class DAC_ADCServer(DeviceServer):
         GET_ADC returns the voltage read by an input channel. Do not confuse with GET_DAC; GET_DAC has not been implemented yet.
         """
         dev=self.selectedDevice(c)
-        if not (port in range(4)):
+        if not (port in range(8)):
             returnValue("Error: invalid port number.")
             return
         yield dev.write("GET_ADC,%i\r"%port)
