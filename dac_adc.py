@@ -553,6 +553,62 @@ class DAC_ADCServer(DeviceServer):
         yield dev.write("FULL_SCALE,%f\r"%(voltage))
         ans = yield dev.read()
         returnValue(ans)
+        
+    @setting(121, offset_and_gain = 'v[]', returns='v[]')
+    def set_offset_and_gain(self,c,offset_and_gain):
+        """
+        Set the offset and gain for all DAC channels.
+        """
+        dev=self.selectedDevice(c)
+        message = "SET_OSG" + ",%f"*8 + "\r"
+        yield dev.write(message%(tuple(offset_and_gain)))
+        ans = [0]*8
+        for i in range(8):
+            ans[i] = yield dev.read()
+        
+        returnValue(ans)
+
+    @setting(122)
+    def inquiry_offset_and_gain(self,c):
+        """
+        Print the current offset and gain values for all DAC channels.
+        """
+        dev=self.selectedDevice(c)
+        yield dev.write("INQUIRY_OSG\r")
+        ans = [0]*8
+        for i in range(8):
+            ans[i] = yield dev.read()
+        
+        returnValue(ans)
+
+    @setting(123)
+    def sn(self,c):
+        """
+        Returns the serial number of the box.
+        """
+        dev = self.selectedDevice(c)
+        yield dev.write("SERIAL_NUMBER\r")
+        ans = yield dev.read()
+        returnValue(ans)
+
+    @setting(124,channel='i',code='i')
+    def set_dac_code(self,c,channel,code):
+        """
+        SET_DAC_CODE writes a code between 0 and 1048576 to a channel and returns the channel and the code written to that DAC's register.
+        """
+        if not (channel in range(4)):
+            returnValue("Error: invalid port number.")
+            return
+        if (code > 1048576) or (code < 0):
+            returnValue("Error: invalid code. Must be between 0 and 1048576.")
+            return
+        dev=self.selectedDevice(c)
+        yield dev.write("SET_DAC_CODE,%i,%i\r"%(channel,code))
+        ans = yield dev.read()
+        code = ans.lower().partition(' to ')[2][:-1]
+        self.sigOutputSet([str(channel),code])
+        returnValue(ans)
+
 
     @setting(9002)
     def read(self,c):
