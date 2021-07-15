@@ -606,6 +606,18 @@ class DAC_ADCServer(DeviceServer):
         self.sigOutputSet([str(channel),code])
         returnValue(ans)
 
+    @setting(125,channel='i')
+    def read_dac_voltage(self,c,channel):
+        """
+        GET_DAC returns the most recent value to which the provided channel was set. 
+        """
+        if not (channel in range(4)):
+            returnValue("Error: invalid port number.")
+        dev = self.selectedDevice(c)
+        yield dev.write("GET_DAC,%i\r"%(channel))
+        ans = yield dev.read()
+        returnValue(ans)
+
     @setting(9002)
     def read(self,c):
         dev=self.selectedDevice(c)
