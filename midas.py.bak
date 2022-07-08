@@ -226,7 +226,7 @@ class MIDASServer(GPIBBusServer):
 		i = 0
 		while i < n_tries:
 			try:
-				self.add_gpib_device(c, midas_address, '', '', 5e3)
+				self.add_gpib_device(c, midas_address, '', '', 5000)
 				#print("add passed")
 				self.address(c, midas_address)
 				#print("address passed")
@@ -240,7 +240,7 @@ class MIDASServer(GPIBBusServer):
 				self.connected = True
 			except:
 				i += 1
-				print(("Connection attempt failed(%d/%d)" % (i+1, n_tries)))
+				print("Connection attempt failed(%d/%d)" % (i+1, n_tries))
 				if midas_address in self.list_devices(c):
 					self.close_connection(c, midas_address)
 				if i != n_tries:
@@ -248,7 +248,7 @@ class MIDASServer(GPIBBusServer):
 		if not self.connected:
 			print("Unable to reach the MIDAS, please check the connections and try again.")
 		else:
-			print(("Connection successful, MIDAS version %d.%d" % (major, minor)))
+			print("Connection successful, MIDAS version %d.%d" % (major, minor))
 
 	@setting(2001, midas_ip='s', midas_port='s', returns='')
 	def midas_close(self, c, midas_ip="169.231.175.92", midas_port="27016"):
@@ -496,7 +496,7 @@ class MIDASServer(GPIBBusServer):
 				results[i] = tmp
 			except KeyboardInterrupt:
 				left = self.num_sweeps_2d - i - 1
-				print(("waiting out %d traces" % left))
+				print("waiting out %d traces" % left)
 				for _ in range(left):
 					self.read_trace(c)
 				raise
