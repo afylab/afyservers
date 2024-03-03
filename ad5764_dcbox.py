@@ -151,7 +151,9 @@ class arduinoDCBoxServer(DeviceServer):
 
     @setting(200,port='i',voltage='v',returns='s')
     def set_voltage(self,c,port,voltage):
-        """Sets the voltage at <port> to <voltage>"""
+        """
+        SET sets a voltage to a channel and returns the channel and the voltage it set.
+        """
         if not (port in self.validPorts):
             returnValue("Error: invalid port. Port must be from 0 to 7.")
         if (voltage>10) or (voltage < -10):
@@ -180,6 +182,9 @@ class arduinoDCBoxServer(DeviceServer):
 
     @setting(210,port='i',returns='v')
     def get_voltage(self,c,port):
+        """
+        GET_DAC returns the voltage output by a DAC channel.
+        """
         if not (port in self.validPorts):
             returnValue("Error: invalid port. Port must be from 0 to 7.")
         dev = self.selectedDevice(c)
@@ -188,6 +193,7 @@ class arduinoDCBoxServer(DeviceServer):
 
     @setting(211,returns='*v')
     def get_all(self,c):
+        """Gets all ports voltages"""
         ans = []
         dev = self.selectedDevice(c)
         for port in self.validPorts:

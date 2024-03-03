@@ -218,7 +218,7 @@ class DAC_ADCServer(DeviceServer):
     @setting(104,port='i',returns='v[]')
     def read_voltage(self,c,port):
         """
-        GET_ADC returns the voltage read by an input channel. Do not confuse with GET_DAC; GET_DAC has not been implemented yet.
+        GET_ADC returns the voltage read by an input channel of the adc.
         """
         dev=self.selectedDevice(c)
         if not (port in range(8)):
@@ -256,8 +256,8 @@ class DAC_ADCServer(DeviceServer):
     @setting(107,dacPorts='*i', adcPorts='*i', ivoltages='*v[]', fvoltages='*v[]', steps='i',delay='v[]',nReadings='i',returns='**v[]')#(*v[],*v[])')
     def buffer_ramp(self,c,dacPorts,adcPorts,ivoltages,fvoltages,steps,delay,nReadings=1):
         """
-        BUFFER_RAMP ramps the specified output channels from the initial voltages to the final voltages and reads the specified input channels in a synchronized manner. 
-        It does it within an specified number steps and a delay (microseconds) between the update of the last output channel and the reading of the first input channel.
+        BUFFER_RAMP ramps the specified output channels from the initial voltages to the final voltages and reads the specified input channels every $steps. 
+        It does it within an specified number steps and a delay between the update of the last output channel and the reading of the first input channel.
         """
         dacN = len(dacPorts)
         adcN = len(adcPorts)
@@ -333,8 +333,8 @@ class DAC_ADCServer(DeviceServer):
     @setting(108,dacPorts='*i', adcPorts='*i', ivoltages='*v[]', fvoltages='*v[]', steps='i',delay='v[]',nReadings='i',adcSteps='i',returns='**v[]')#(*v[],*v[])')
     def buffer_ramp_dis(self,c,dacPorts,adcPorts,ivoltages,fvoltages,steps,delay,adcSteps,nReadings=1):
         """
-        BUFFER_RAMP ramps the specified output channels from the initial voltages to the final voltages and reads the specified input channels in a synchronized manner. 
-        It does it within an specified number steps and a delay (microseconds) between the update of the last output channel and the reading of the first input channel.
+        BUFFER_RAMP_DIS ramps the specified output channels from the initial voltages to the final voltages and reads the specified input channels every $adcSteps. 
+        It does it within an specified number steps and a delay between the update of the last output channel and the reading of the first input channel.
         """
         
         if adcSteps>steps:
@@ -431,7 +431,7 @@ class DAC_ADCServer(DeviceServer):
     @setting(110,returns='s')
     def id(self,c):
         """
-        IDN? returns the string.
+        IDN? returns the string the device identification.
         """
         dev=self.selectedDevice(c)
         yield dev.write("*IDN?\r")
@@ -553,6 +553,19 @@ class DAC_ADCServer(DeviceServer):
         yield dev.write("FULL_SCALE,%f\r"%(voltage))
         ans = yield dev.read()
         returnValue(ans)
+
+    @setting(121,port='i',returns='v[]')
+    def get_voltage(self,c,port):
+        """
+        GET_DAC returns the voltage output by a DAC channel.
+        """
+        dev=self.selectedDevice(c)
+        if not (port in range(4)):
+            returnValue("Error: invalid port number.")
+            return
+        yield dev.write("GET_DAC,%i\r"%port)
+        ans = yield dev.read()
+        returnValue(float(ans))
 
     @setting(9002)
     def read(self,c):
